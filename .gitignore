@@ -1,0 +1,33 @@
+# deps
+node_modules/
+
+# build outputs
+dist/
+src-tauri/target/
+
+# tauri
+src-tauri/gen/
+
+# test
+test-results/
+playwright-report/
+coverage/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+bash.exe.stackdump
