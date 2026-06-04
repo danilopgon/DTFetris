@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="DTF Sheet Optimizer" width="160" />
+  <img src="assets/logo.svg" alt="DTFetris" width="160" />
 </p>
 
-# DTF Sheet Optimizer
+# DTFetris
 
 Aplicación de escritorio para automatizar la composición de planchas DTF. Distribuye diseños en una o más hojas de impresión mediante un algoritmo de packing automático, eliminando el cálculo manual de grids, duplicación y posicionado.
 

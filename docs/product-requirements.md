@@ -1,6 +1,6 @@
 # Requisitos de Producto
 
-DTF Sheet Optimizer es una aplicación de escritorio local para automatizar la composición de planchas DTF y reducir el trabajo manual de preparación para impresión.
+DTFetris es una aplicación de escritorio local para automatizar la composición de planchas DTF y reducir el trabajo manual de preparación para impresión.
 
 ## Visión
 

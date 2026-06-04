@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DTF Sheet Optimizer",
+  "productName": "DTFetris",
   "version": "0.1.0",
   "identifier": "com.dtf-sheet-optimizer.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "DTF Sheet Optimizer",
+        "title": "DTFetris",
         "width": 1200,
         "height": 800,
         "resizable": true,

@@ -1,4 +1,4 @@
-# Documentación de DTF Sheet Optimizer
+# Documentación de DTFetris
 
 Esta carpeta reemplaza el BRS monolítico por documentos enfocados. Úsala como punto de entrada para encontrar rápido requisitos, reglas de dominio, arquitectura, flujos y verificación.
 

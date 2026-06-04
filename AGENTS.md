@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Este archivo es el router operativo para futuros agentes que trabajen en DTF Sheet Optimizer. Antes de cambiar código, localiza el documento correcto y verifica si la regla ya existe.
+Este archivo es el router operativo para futuros agentes que trabajen en DTFetris. Antes de cambiar código, localiza el documento correcto y verifica si la regla ya existe.
 
 ## Producto y stack
 
-DTF Sheet Optimizer es una aplicación de escritorio local, single-user, para automatizar la composición de planchas DTF.
+DTFetris es una aplicación de escritorio local, single-user, para automatizar la composición de planchas DTF.
 
 | Área | Stack actual |
 |---|---|

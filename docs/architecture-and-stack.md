@@ -1,6 +1,6 @@
 # Arquitectura y Stack
 
-DTF Sheet Optimizer es una aplicación de escritorio Tauri 2 con frontend React/TypeScript y backend Rust para dominio, packing, persistencia y exportación.
+DTFetris es una aplicación de escritorio Tauri 2 con frontend React/TypeScript y backend Rust para dominio, packing, persistencia y exportación.
 
 ## Stack detectado
 
