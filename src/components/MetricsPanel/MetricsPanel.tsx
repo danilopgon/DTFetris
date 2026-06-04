@@ -16,15 +16,15 @@ export default function MetricsPanel() {
   return (
     <div className="flex gap-8 text-sm">
       <div>
-        <span className="text-gray-400">Sheets:</span>{' '}
+        <span className="text-gray-400">Planchas:</span>{' '}
         <span className="font-semibold">{sheets.length}</span>
       </div>
       <div>
-        <span className="text-gray-400">Used area:</span>{' '}
+        <span className="text-gray-400">Área utilizada:</span>{' '}
         <span className="font-semibold">{usedArea.toFixed(1)} cm²</span>
       </div>
       <div>
-        <span className="text-gray-400">Efficiency:</span>{' '}
+        <span className="text-gray-400">Eficiencia:</span>{' '}
         <span className="font-semibold">{efficiency}%</span>
       </div>
     </div>

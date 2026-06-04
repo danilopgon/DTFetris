@@ -5,9 +5,9 @@ export default function DesignList() {
 
   return (
     <div>
-      <h2 className="mb-4 text-lg font-semibold">Designs</h2>
+      <h2 className="mb-4 text-lg font-semibold">Diseños</h2>
       {designs.length === 0 ? (
-        <p className="text-sm text-gray-400">No designs added yet.</p>
+        <p className="text-sm text-gray-400">Aún no hay diseños.</p>
       ) : (
         <ul className="space-y-2">
           {designs.map((d) => (

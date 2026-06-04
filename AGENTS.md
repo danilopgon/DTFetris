@@ -22,6 +22,11 @@ DTF Sheet Optimizer es una aplicación de escritorio local, single-user, para au
 
 Usa [docs/README.md](docs/README.md) como índice y router documental único. No dupliques aquí listas de documentos ni rutas por tipo de tarea.
 
+## Idioma de la interfaz
+
+- Toda la UI debe estar en español: labels, botones, mensajes de error, confirmaciones, estados vacíos, tooltips, placeholders y strings de accesibilidad (`aria-label`, `alt`, etc.).
+- No implementar i18n ni inglés como fallback. El español es el único idioma de la app.
+
 ## Convenciones de dominio
 
 - El dominio usa centímetros como fuente de verdad.

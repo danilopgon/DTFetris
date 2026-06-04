@@ -14,7 +14,7 @@ export default function SheetPreview() {
 
   return (
     <div className="overflow-auto">
-      <h2 className="mb-4 text-lg font-semibold">Sheet Preview</h2>
+      <h2 className="mb-4 text-lg font-semibold">Vista previa de plancha</h2>
       {sheets.length === 0 ? (
         <div
           style={{ width: stageWidth, height: stageHeight }}
