@@ -50,6 +50,9 @@ mod tests {
 
 Cobertura mínima:
 
+- Contratos de dominio: centímetros enteros positivos, rechazo de decimales/cero/negativos y códigos técnicos estables.
+- Validación editable vs generación: `quantity: 0` es válido en edición, pero packing requiere al menos un diseño con `quantity > 0`.
+- Estado Zustand: plancha inicial de 55 cm x 100 cm y sincronización de configuración personalizada.
 - Conversion cm a px para distintos DPI.
 - Cálculo de aspect ratio original.
 - Detección de deformación por diferencia entre aspect ratio original y configurado.
