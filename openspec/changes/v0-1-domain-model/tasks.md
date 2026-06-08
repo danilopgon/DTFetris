@@ -33,18 +33,18 @@ Chain strategy: stacked-to-main
 ## Phase 2: Store and Frontend Command Boundary
 
 - [x] 2.1 RED/GREEN: Test and update `src/store/useAppStore.ts` to initialize sheet config at 55 cm width x 100 cm height, not 60 x 100.
-- [ ] 2.2 RED/GREEN: Test and update `src/commands/index.ts` so `runPacking(request: PackingRequest): Promise<PackingResult>` invokes `run_packing` with `{ request }`.
+- [x] 2.2 RED/GREEN: Test and update `src/commands/index.ts` so `runPacking(request: PackingRequest): Promise<PackingResult>` invokes `run_packing` with `{ request }`.
 - [ ] 2.3 RED/GREEN: Extend `src/utils/units.test.ts` and `src/utils/units.ts` only for boundary conversion expectations, including export `300` DPI naming if useful.
 
 ## Phase 3: Rust Domain Contract (RED/GREEN)
 
-- [ ] 3.1 RED: Add serde JSON parity tests in `src-tauri/src/domain/design.rs` for camelCase keys over snake_case Rust fields.
-- [ ] 3.2 GREEN: Add `#[serde(rename_all = "camelCase")]` to Rust domain structs while preserving existing field semantics.
-- [ ] 3.3 RED/GREEN: Define and test `SheetConfig`, `PackingRequest`, `PackingResult`, `UnplacedItem`, validation helpers, and stable unplaced reason codes in `src-tauri/src/domain/packing.rs`.
-- [ ] 3.4 RED/GREEN: Update `src-tauri/src/commands/packing.rs` to accept `PackingRequest`, validate defensively, and return empty `PackingResult` placeholder without MaxRects logic.
+- [x] 3.1 RED: Add serde JSON parity tests in `src-tauri/src/domain/design.rs` for camelCase keys over snake_case Rust fields.
+- [x] 3.2 GREEN: Add `#[serde(rename_all = "camelCase")]` to Rust domain structs while preserving existing field semantics.
+- [x] 3.3 RED/GREEN: Define and test `SheetConfig`, `PackingRequest`, `PackingResult`, `UnplacedItem`, validation helpers, and stable unplaced reason codes in `src-tauri/src/domain/packing.rs`.
+- [x] 3.4 RED/GREEN: Update `src-tauri/src/commands/packing.rs` to accept `PackingRequest`, validate defensively, and return empty `PackingResult` placeholder without MaxRects logic.
 
 ## Phase 4: Documentation and Verification
 
 - [x] 4.1 Update `docs/domain-and-data-model.md` in Spanish with integer-cm MVP rules, editable/generation quantity boundary, default sheet config, request/result shapes, and stable unplaced codes.
-- [ ] 4.2 Update `docs/architecture-and-stack.md` and `docs/testing-strategy.md` in Spanish for the new React/Rust command contract and serde/domain validation coverage.
+- [x] 4.2 Update `docs/architecture-and-stack.md` and `docs/testing-strategy.md` in Spanish for the new React/Rust command contract and serde/domain validation coverage.
 - [ ] 4.3 Run `npm run test` and `cargo test` from `src-tauri`; record any failures before apply completion.

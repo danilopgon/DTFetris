@@ -1,7 +1,11 @@
 mod commands;
 mod domain;
 
-use commands::{export::export_png, packing::run_packing, persistence::{load_job, save_job}};
+use commands::{
+    export::export_png,
+    packing::run_packing,
+    persistence::{load_job, save_job},
+};
 
 pub fn run() {
     tauri::Builder::default()
