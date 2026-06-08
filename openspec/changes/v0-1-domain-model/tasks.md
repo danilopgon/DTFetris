@@ -34,7 +34,7 @@ Chain strategy: stacked-to-main
 
 - [x] 2.1 RED/GREEN: Test and update `src/store/useAppStore.ts` to initialize sheet config at 55 cm width x 100 cm height, not 60 x 100.
 - [x] 2.2 RED/GREEN: Test and update `src/commands/index.ts` so `runPacking(request: PackingRequest): Promise<PackingResult>` invokes `run_packing` with `{ request }`.
-- [ ] 2.3 RED/GREEN: Extend `src/utils/units.test.ts` and `src/utils/units.ts` only for boundary conversion expectations, including export `300` DPI naming if useful.
+- [x] 2.3 RED/GREEN: Extend `src/utils/units.test.ts` and `src/utils/units.ts` only for boundary conversion expectations, including export `300` DPI naming if useful.
 
 ## Phase 3: Rust Domain Contract (RED/GREEN)
 
@@ -47,4 +47,11 @@ Chain strategy: stacked-to-main
 
 - [x] 4.1 Update `docs/domain-and-data-model.md` in Spanish with integer-cm MVP rules, editable/generation quantity boundary, default sheet config, request/result shapes, and stable unplaced codes.
 - [x] 4.2 Update `docs/architecture-and-stack.md` and `docs/testing-strategy.md` in Spanish for the new React/Rust command contract and serde/domain validation coverage.
-- [ ] 4.3 Run `npm run test` and `cargo test` from `src-tauri`; record any failures before apply completion.
+- [x] 4.3 Run `npm run test` and `cargo test` from `src-tauri`; record any failures before apply completion.
+
+### Final Verification Notes
+
+- `npx vitest run src/utils/units.test.ts` → PASS, 4 tests.
+- `npx tsc --noEmit` → PASS.
+- `cargo test` from `src-tauri` → PASS, 9 tests.
+- `npm run test` → FAIL, known out-of-scope test discovery issue: Vitest collects `tests/e2e/basic.spec.ts`, which is a Playwright spec and fails during collection with `Playwright Test did not expect test() to be called here`.
