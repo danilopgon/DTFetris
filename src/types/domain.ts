@@ -59,7 +59,7 @@ export type PackingResult = {
   unplacedItems: UnplacedItem[]
 }
 
-export type DomainValidationErrorCode = UnplacedReasonCode | 'no_positive_quantity'
+export type DomainValidationErrorCode = UnplacedReasonCode | 'invalid_quantity'
 
 export type DomainValidationError = {
   code: DomainValidationErrorCode
@@ -109,7 +109,7 @@ export function validatePackingRequest(request: PackingRequest): DomainValidatio
   }
 
   if (!request.designs.some((design) => design.quantity > 0)) {
-    errors.push({ code: 'no_positive_quantity', field: 'designs' })
+    errors.push({ code: 'invalid_quantity', field: 'designs' })
   }
 
   return errors

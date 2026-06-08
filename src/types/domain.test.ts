@@ -75,7 +75,7 @@ describe('packing request validation', () => {
       designs: [{ ...baseDesign, quantity: 0 }],
     }
 
-    expect(validatePackingRequest(request)).toEqual([{ code: 'no_positive_quantity', field: 'designs' }])
+    expect(validatePackingRequest(request)).toEqual([{ code: 'invalid_quantity', field: 'designs' }])
   })
 
   it('rejects generation when there are no designs', () => {
@@ -84,7 +84,7 @@ describe('packing request validation', () => {
       designs: [],
     }
 
-    expect(validatePackingRequest(request)).toEqual([{ code: 'no_positive_quantity', field: 'designs' }])
+    expect(validatePackingRequest(request)).toEqual([{ code: 'invalid_quantity', field: 'designs' }])
   })
 })
 
