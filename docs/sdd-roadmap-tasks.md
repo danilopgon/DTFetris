@@ -35,7 +35,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 | Orden | Estado | Cambio SDD sugerido | Versión | Objetivo | Requisitos principales | Verificación mínima |
 |---:|---|---|---|---|---|---|
 | 1 | ✅ Completada | `v0-1-project-shell` | v0.1 | Crear la base Tauri + Vite + React + TypeScript con estructura inicial. | Base técnica del roadmap. | `npm run build`, `cargo test` en `src-tauri` si aplica. |
-| 2 | ⏳ Pendiente | `v0-1-domain-model` | v0.1 | Definir modelos TS/Rust para plancha, diseño, unidades cm, cantidades y resultados de packing. | RF-002, RF-013. | Tests unitarios de conversión cm/px y serialización de modelos. |
+| 2 | 🚧 En curso | `v0-1-domain-model` | v0.1 | Definir modelos TS/Rust para plancha, diseño, unidades cm, cantidades y resultados de packing. | RF-002, RF-013. | Evidencia enfocada aprobada; falta nueva verificación/archive nativo tras corregir configuración de Vitest/ESLint. |
 | 3 | ⏳ Pendiente | `v0-1-design-import` | v0.1 | Cargar PNG/SVG, copiar archivos a `app_data_dir`, detectar límites visibles y guardar rutas en estado. | RF-001. | Tests de comando Tauri o capa adaptadora; archivo inválido y padding transparente. |
 | 4 | ⏳ Pendiente | `v0-1-basic-editing` | v0.1 | Permitir editar nombre, dimensiones, cantidad, rotación permitida y eliminar diseños. | RF-002, RF-004, RF-005, RF-012. | Tests de store/componentes para mutaciones y repacking disparado. |
 | 5 | ⏳ Pendiente | `v0-1-single-sheet-packing` | v0.1 | Implementar packing básico MaxRects en Rust para una sola plancha usando el área visible como rectángulo ocupado. | RF-006, RF-013. | Unit tests Rust con casos simples, límites, piezas que no caben y transparencia. |
@@ -68,6 +68,8 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 ### 2. `v0-1-domain-model`
 
 **Resultado esperado:** contratos claros para dimensiones físicas, diseños, planchas y resultados de layout.
+
+**Estado SDD:** implementación y tareas completas con evidencia enfocada, pero no se marca como completada porque el último `verify-report.md` nativo registra `FAIL`. Los bloqueos citados allí ya no coinciden con la configuración actual (`vitest.config.ts` excluye `tests/e2e/**` y existe `eslint.config.mjs`), por lo que el siguiente paso correcto es re-verificar y archivar, no sobreafirmar cierre desde el roadmap.
 
 **Incluye:** tipos compartidos equivalentes en TypeScript/Rust cuando aplique y helpers de conversión para preview/exportación.
 
