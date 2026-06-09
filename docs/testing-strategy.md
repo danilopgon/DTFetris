@@ -22,6 +22,8 @@ Cobertura mínima:
 - Cálculo de áreas: métricas por plancha y globales.
 - Repacking: el resultado es consistente ante modificaciones.
 - Serialización: los structs se serializan y deserializan correctamente con `serde`.
+- Paridad JSON Rust/TypeScript: los contratos Tauri usan claves `camelCase` mediante `#[serde(rename_all = "camelCase")]` y tests de round-trip con `serde_json`.
+- Validación defensiva de packing: dimensiones en centímetros enteros positivos y al menos un diseño con `quantity > 0` antes de ejecutar packing.
 - Validación de aspect ratio: detección de deformación en PNG con `naturalWidth / naturalHeight` y SVG con `viewBox`.
 
 Ejemplos de casos:
@@ -50,6 +52,9 @@ mod tests {
 
 Cobertura mínima:
 
+- Contratos de dominio: centímetros enteros positivos, rechazo de decimales/cero/negativos y códigos técnicos estables.
+- Validación editable vs generación: `quantity: 0` es válido en edición, pero packing requiere al menos un diseño con `quantity > 0`.
+- Estado Zustand: plancha inicial de 55 cm x 100 cm y sincronización de configuración personalizada.
 - Conversion cm a px para distintos DPI.
 - Cálculo de aspect ratio original.
 - Detección de deformación por diferencia entre aspect ratio original y configurado.
@@ -62,7 +67,7 @@ Verifican que los comandos expuestos al frontend funcionan correctamente end-to-
 
 Cobertura mínima:
 
-- `run_packing`: recibe diseños válidos y devuelve planchas correctas.
+- `run_packing`: recibe `PackingRequest`, valida el contrato de dominio y devuelve `PackingResult` con `sheets` y `unplacedItems`.
 - `export_png`: genera el archivo en la ruta especificada.
 - `save_job` y `load_job`: el estado guardado se recupera íntegro.
 - Manejo de errores: rutas inválidas, diseños mal formados y permisos de escritura.

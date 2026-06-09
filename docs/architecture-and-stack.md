@@ -37,22 +37,16 @@ La comunicación entre React y Rust se realiza mediante Tauri commands.
 
 ```rust
 #[tauri::command]
-fn run_packing(
-    designs: Vec<DesignInput>,
-    sheet_width: f64,
-    sheet_height: f64,
-) -> Result<Vec<Sheet>, String> { ... }
+fn run_packing(request: PackingRequest) -> Result<PackingResult, String> { ... }
 ```
 
 ```typescript
-const sheets = await invoke<Sheet[]>('run_packing', {
-  designs,
-  sheetWidth: 55.0,
-  sheetHeight: 100.0,
-})
+const result = await invoke<PackingResult>('run_packing', { request })
 ```
 
-Tauri serializa y deserializa automáticamente entre JSON y structs Rust mediante `serde`. La conversión `camelCase` en TypeScript a `snake_case` en Rust es automática.
+El contrato de packing usa un único payload `PackingRequest` con `sheet` y `designs`, y devuelve `PackingResult` con `sheets` y `unplacedItems`. Tauri serializa y deserializa mediante `serde`; los structs Rust usan `#[serde(rename_all = "camelCase")]` para mantener las claves JSON del frontend (`widthCm`, `imagePath`, `unplacedItems`) aunque los campos internos sigan en `snake_case`.
+
+Los valores de dominio que viajan por el comando son códigos técnicos estables. Por ejemplo, `UnplacedItem.reason` usa valores como `does_not_fit`, no textos de interfaz en español. La UI es responsable de mapear esos códigos a mensajes visibles.
 
 Los errores se modelan como `Result<T, String>` en Rust y se mapean a `Promise` rechazadas en TypeScript.
 

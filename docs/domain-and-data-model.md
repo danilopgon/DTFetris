@@ -8,19 +8,24 @@ El dominio trabaja en centímetros. Las conversiones a píxeles son detalles de 
 |---|---|
 | Unidad fuente de verdad | Centímetros en todo el dominio. |
 | Dimensiones de plancha | Configurables por usuario, sin valores hardcodeados. |
+| Dimensiones físicas MVP | Solo centímetros enteros positivos; no se aceptan decimales, cero ni negativos para generación/packing. |
+| Plancha inicial de la app | Trabajo nuevo inicia con 55 cm de ancho x 100 cm de alto; no es una invariante del dominio. |
+| Cantidad editable | Una cantidad de diseño puede ser `0` mientras se edita. |
+| Cantidad para generar | Generación/packing requiere al menos un diseño con `quantity > 0`. |
 | Aspect ratio | Se calcula al cargar la imagen y queda como campo explícito e inmutable. |
 | Deformación | Nunca automática; requiere confirmación explícita. |
 | Rutas de imagen | Se almacenan como rutas en disco dentro de `app_data_dir`, no como objetos `File`. |
 | Duplicado | Comparte la misma ruta de imagen que el original. |
+| Ítems no ubicados | El resultado de packing conserva ítems no ubicados de forma explícita para multipágina futura. |
 
 ## Sistema de coordenadas
 
 Todo el dominio trabaja exclusivamente en centímetros. Las dimensiones físicas son la fuente de verdad.
 
 ```text
-Plancha:    { width_cm: 55.0, height_cm: 100.0 }
-Diseno:     { width_cm: 27.0, height_cm: 30.0 }
-Placement:  { x_cm: 0.0, y_cm: 30.0 }
+Plancha:    { width_cm: 55, height_cm: 100 }
+Diseno:     { width_cm: 27, height_cm: 30 }
+Placement:  { x_cm: 0, y_cm: 30 }
 ```
 
 ### Motivación
@@ -52,12 +57,19 @@ Para exportación, `dpi = 300`.
 ## Modelo TypeScript
 
 ```typescript
+type Cm = number
+
+type SheetConfig = {
+  widthCm: Cm
+  heightCm: Cm
+}
+
 type DesignInput = {
   id: string
   name: string
   imagePath: string
-  widthCm: number
-  heightCm: number
+  widthCm: Cm
+  heightCm: Cm
   originalAspectRatio: number
   quantity: number
   canRotate: boolean
@@ -74,11 +86,41 @@ type Placement = {
 
 type Sheet = {
   id: string
-  widthCm: number
-  heightCm: number
+  widthCm: Cm
+  heightCm: Cm
   placements: Placement[]
 }
+
+type PackingRequest = {
+  sheet: SheetConfig
+  designs: DesignInput[]
+}
+
+type UnplacedReasonCode =
+  | 'does_not_fit'
+  | 'invalid_dimensions'
+  | 'invalid_quantity'
+  | 'sheet_too_small'
+
+type UnplacedItem = {
+  designId: string
+  itemIndex: number
+  reason: UnplacedReasonCode
+}
+
+type PackingResult = {
+  sheets: Sheet[]
+  unplacedItems: UnplacedItem[]
+}
 ```
+
+Los códigos como `does_not_fit` son valores técnicos estables y neutrales. La UI debe mapearlos a textos en español cuando corresponda; no deben guardarse como copy de interfaz.
+
+### Validación TypeScript
+
+- `isPositiveIntegerCm` acepta solo centímetros enteros positivos.
+- `validateEditableDesignInput` permite `quantity: 0` durante edición si el resto del diseño es válido.
+- `validatePackingRequest` exige una plancha válida y al menos un diseño con `quantity > 0` antes de invocar packing.
 
 ## Modelo Rust
 

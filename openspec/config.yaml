@@ -1,0 +1,90 @@
+schema: spec-driven
+project: dtfetris
+artifact_store: openspec
+strict_tdd: true
+
+context: |
+  Product: local single-user desktop app for automating DTF sheet composition.
+  Tech stack: Tauri 2, Rust 2021, Vite, React 18, TypeScript 5, Zustand 5, Tailwind CSS 3, React Konva.
+  Architecture: React UI invokes Rust Tauri commands; Rust owns domain, packing, persistence, and PNG export.
+  Persistence: backend std::fs + serde_json; image references are disk paths, not browser File objects.
+  Domain: centimeters are the source of truth; convert to pixels only for preview/export; never pack in pixels.
+  Documentation: use docs/README.md as the router; update focused docs with behavior changes.
+  UI language: Spanish only; no i18n or English fallback in product UI.
+
+testing:
+  detected: "2026-06-08"
+  strict_tdd: true
+  runners:
+    - layer: unit_frontend
+      framework: Vitest
+      command: npm run test
+      config: vitest.config.ts
+      environment: jsdom
+    - layer: component_frontend
+      framework: React Testing Library
+      command: npm run test
+      setup: src/test-setup.ts
+    - layer: unit_backend
+      framework: cargo test
+      command: cargo test
+      working_directory: src-tauri
+    - layer: e2e
+      framework: Playwright
+      command: npm run test:e2e
+      config: playwright.config.ts
+  coverage:
+    available: false
+    command: ""
+    note: No package script or coverage provider was detected.
+  quality:
+    linter:
+      available: true
+      command: npm run lint
+      config: .eslintrc.json
+    type_checker:
+      available: true
+      command: tsc --noEmit
+      config: tsconfig.json
+      note: TypeScript is configured with noEmit and strict checks, but no package script wraps this command.
+    formatter:
+      available: true
+      command: npm run format
+      config: .prettierrc
+    build:
+      available: true
+      command: npm run build
+
+rules:
+  proposal:
+    - Verify the relevant requirement document through docs/README.md before proposing behavior changes.
+    - Include rollback plans for risky changes.
+    - Respect review budget of 400 changed lines; ask before using chained PR strategy.
+  specs:
+    - Generated SDD artifacts are written in English unless explicitly requested otherwise.
+    - Use RFC 2119 keywords and Given/When/Then scenarios.
+    - Preserve repository conventions: product UI strings are Spanish only.
+  design:
+    - Document React/Rust boundary changes and keep shared TypeScript/Rust types aligned.
+    - Use centimeters as domain units; pixels are allowed only at preview/export boundaries.
+    - Include persistence and export implications for changes that touch jobs, assets, packing, or PNG output.
+  tasks:
+    - Group tasks by phase and keep each task completable in one focused session.
+    - Keep tests and documentation updates in the same work unit as behavior changes.
+  apply:
+    guidelines:
+      - Follow strict RED-GREEN-REFACTOR unless a phase explicitly records why TDD is not applicable.
+      - Follow existing code patterns and repository docs.
+      - Do not use localStorage or IndexedDB for persisted jobs.
+    tdd: true
+    test_command: npm run test
+  verify:
+    test_command: npm run test
+    build_command: npm run build
+    e2e_command: npm run test:e2e
+    rust_test_command: cargo test
+    rust_test_working_directory: src-tauri
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas.
+    - Merge accepted delta specs into openspec/specs/ and keep archived changes as audit trail.
