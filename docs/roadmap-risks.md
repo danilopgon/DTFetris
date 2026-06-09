@@ -45,6 +45,7 @@ Este documento concentra la secuencia de entrega, restricciones y riesgos técni
 | MaxRects propio puede crecer en complejidad | Packing incorrecto o difícil de mantener | Hacer spike de crates antes de implementar. |
 | Exportación a 300 DPI consume mucha memoria | Fallos con planchas grandes | Mantener exportación en Rust y testear inputs grandes. |
 | SVG sin dimensiones explícitas | Aspect ratio incorrecto | Extraer proporción desde `viewBox`. |
+| Padding transparente en diseños importados | Tamaño impreso incorrecto o métricas de ocupación infladas | Detectar límites visibles y aplicar dimensiones físicas al arte visible. |
 | Persistencia de objetos `File` del navegador | Estado imposible de serializar | Persistir rutas en `app_data_dir` desde backend Rust. |
 | Cambios visuales en preview | Regresiones difíciles de detectar | Usar snapshots de Playwright y actualizarlos solo cuando el cambio sea deliberado. |
 
@@ -56,3 +57,4 @@ Este documento concentra la secuencia de entrega, restricciones y riesgos técni
 - El tamaño máximo recomendado por diseño es 20 MB.
 - La exportación se realiza en Rust, no en Canvas.
 - Las dimensiones físicas en cm son la fuente de verdad.
+- Las dimensiones configuradas se aplican al arte visible; la transparencia no ocupa plancha.

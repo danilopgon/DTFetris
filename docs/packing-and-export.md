@@ -12,9 +12,19 @@ MaxRects, implementado en Rust.
 
 - Evitar solapamientos.
 - Respetar límites de la plancha.
+- Usar las dimensiones del arte visible como rectángulo ocupado; el padding transparente del archivo no ocupa superficie de plancha.
 - Soportar rotación opcional por diseño.
 - Crear nuevas planchas automáticamente cuando se agota el espacio.
 - Priorizar el aprovechamiento de superficie.
+
+### Transparencia
+
+El rectángulo que entra a MaxRects representa el área visible del diseño en centímetros. La caja completa del archivo PNG/SVG no debe usarse como superficie ocupada si incluye transparencia alrededor del arte.
+
+Esto protege dos invariantes de negocio:
+
+- La plancha final no reserva material por píxeles transparentes que no se imprimen.
+- Las dimensiones pedidas por el cliente se aplican al arte visible, no al canvas del archivo.
 
 ## Spike obligatorio antes de implementar MaxRects
 
@@ -49,10 +59,11 @@ pixels = centimeters * (dpi / 2.54)
 
 1. Rust recibe las planchas y `outputPath` desde Tauri command.
 2. Rust lee los archivos originales desde disco.
-3. Inputs PNG se compositan directamente con `image`.
-4. Inputs SVG se rasterizan primero con `resvg`.
-5. `image` composita todos los bitmaps en la plancha final.
-6. Rust escribe el PNG en disco.
+3. Rust recorta o normaliza el área visible, ignorando padding transparente.
+4. Inputs PNG se compositan con `image` usando el área visible como base de escala.
+5. Inputs SVG se rasterizan primero con `resvg` y se ajustan a sus límites visibles.
+6. `image` composita todos los bitmaps en la plancha final.
+7. Rust escribe el PNG en disco.
 
 ## Razón de no usar Canvas
 

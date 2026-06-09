@@ -8,6 +8,8 @@ El usuario podrá cargar uno o varios archivos PNG o SVG.
 
 El archivo se copiará al directorio de datos de la aplicación (`app_data_dir`) mediante la API de filesystem de Tauri. La referencia almacenada en el estado será la ruta en disco, no el objeto `File` del navegador.
 
+Al cargar un diseño, el sistema deberá identificar sus límites visibles. La transparencia alrededor del arte no formará parte del tamaño físico impreso ni de la superficie ocupada en la plancha.
+
 ## RF-002 - Configuración de diseño
 
 Cada diseño permitirá configurar:
@@ -17,6 +19,8 @@ Cada diseño permitirá configurar:
 - Alto en cm.
 - Cantidad.
 - Rotación permitida.
+
+Las dimensiones configuradas representan el tamaño físico del arte visible. Si el archivo contiene padding transparente, ese padding no reduce el tamaño final del arte ni reserva superficie adicional.
 
 ## RF-003 - Duplicado de diseño
 
@@ -63,6 +67,8 @@ El sistema mostrará métricas por plancha y globales:
 - Área utilizada en cm2.
 - Área libre en cm2.
 - Porcentaje de ocupación.
+
+El área utilizada se calculará sobre el rectángulo físico del arte visible colocado en la plancha, no sobre el canvas transparente del archivo fuente.
 
 ## RF-010 - Exportación
 

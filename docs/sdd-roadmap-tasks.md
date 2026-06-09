@@ -25,6 +25,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 - Una tarea debe entregar un incremento usable o verificable.
 - Una tarea debe tener criterios de aceptación claros antes de implementarse.
 - El dominio mantiene centímetros como fuente de verdad; píxeles solo para preview/exportación.
+- Las dimensiones configuradas aplican al arte visible del diseño; el padding transparente no cuenta como superficie ocupada.
 - El packing y la exportación pertenecen al backend Rust.
 - La persistencia local usa archivos y rutas en `app_data_dir`, nunca `localStorage` ni `IndexedDB`.
 - Los tests deben acompañar el cambio desde la primera versión implementable.
@@ -35,9 +36,9 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 |---:|---|---|---|---|---|---|
 | 1 | ✅ Completada | `v0-1-project-shell` | v0.1 | Crear la base Tauri + Vite + React + TypeScript con estructura inicial. | Base técnica del roadmap. | `npm run build`, `cargo test` en `src-tauri` si aplica. |
 | 2 | ⏳ Pendiente | `v0-1-domain-model` | v0.1 | Definir modelos TS/Rust para plancha, diseño, unidades cm, cantidades y resultados de packing. | RF-002, RF-013. | Tests unitarios de conversión cm/px y serialización de modelos. |
-| 3 | ⏳ Pendiente | `v0-1-design-import` | v0.1 | Cargar PNG/SVG, copiar archivos a `app_data_dir` y guardar rutas en estado. | RF-001. | Tests de comando Tauri o capa adaptadora; caso de archivo inválido. |
+| 3 | ⏳ Pendiente | `v0-1-design-import` | v0.1 | Cargar PNG/SVG, copiar archivos a `app_data_dir`, detectar límites visibles y guardar rutas en estado. | RF-001. | Tests de comando Tauri o capa adaptadora; archivo inválido y padding transparente. |
 | 4 | ⏳ Pendiente | `v0-1-basic-editing` | v0.1 | Permitir editar nombre, dimensiones, cantidad, rotación permitida y eliminar diseños. | RF-002, RF-004, RF-005, RF-012. | Tests de store/componentes para mutaciones y repacking disparado. |
-| 5 | ⏳ Pendiente | `v0-1-single-sheet-packing` | v0.1 | Implementar packing básico MaxRects en Rust para una sola plancha. | RF-006, RF-013. | Unit tests Rust con casos simples, límites y piezas que no caben. |
+| 5 | ⏳ Pendiente | `v0-1-single-sheet-packing` | v0.1 | Implementar packing básico MaxRects en Rust para una sola plancha usando el área visible como rectángulo ocupado. | RF-006, RF-013. | Unit tests Rust con casos simples, límites, piezas que no caben y transparencia. |
 | 6 | ⏳ Pendiente | `v0-1-basic-preview` | v0.1 | Mostrar una plancha con React Konva convirtiendo cm a px solo para visualización. | RF-008. | Tests de conversión y smoke test de renderizado. |
 | 7 | ⏳ Pendiente | `v0-2-multipage-packing` | v0.2 | Generar automáticamente múltiples planchas cuando la primera se llena. | RF-007, RF-006. | Unit tests Rust con overflow controlado y conteo esperado de planchas. |
 | 8 | ⏳ Pendiente | `v0-2-rotation-support` | v0.2 | Soportar rotación opcional en packing respetando la configuración por diseño. | RF-002, RF-004, RF-006. | Tests con diseños que solo caben rotados y diseños con rotación bloqueada. |
@@ -45,7 +46,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 | 10 | ⏳ Pendiente | `v0-2-aspect-ratio-validation` | v0.2 | Detectar proporción original PNG/SVG y advertir deformaciones. | RF-014. | Tests para PNG, SVG con `viewBox` y confirmación explícita de deformación. |
 | 11 | ⏳ Pendiente | `v0-2-tauri-integration-tests` | v0.2 | Cubrir comandos Tauri principales con tests de integración. | RF-001, RF-006, RF-012. | Tests de carga, packing y errores de commands. |
 | 12 | ⏳ Pendiente | `v0-2-react-component-tests` | v0.2 | Agregar cobertura básica de componentes críticos con React Testing Library. | RF-002, RF-004, RF-008, RF-009. | Tests de edición, listado, métricas y estados vacíos. |
-| 13 | ⏳ Pendiente | `v0-3-png-export` | v0.3 | Exportar planchas PNG a 300 DPI desde Rust con `image`. | RF-010. | Tests Rust de dimensiones exportadas, DPI esperado y composición básica. |
+| 13 | ⏳ Pendiente | `v0-3-png-export` | v0.3 | Exportar planchas PNG a 300 DPI desde Rust con `image`, escalando el arte visible a las dimensiones configuradas. | RF-010. | Tests Rust de dimensiones exportadas, DPI esperado, composición básica y padding transparente. |
 | 14 | ⏳ Pendiente | `v0-3-export-e2e` | v0.3 | Validar el flujo completo de exportación con Playwright + WebDriver. | RF-010. | E2E que carga diseño, genera plancha y verifica archivo exportado. |
 | 15 | ⏳ Pendiente | `v0-4-local-persistence` | v0.4 | Guardar y cargar trabajos localmente como JSON con rutas a imágenes. | RF-011. | Tests de serialización, lectura/escritura y rutas inexistentes. |
 | 16 | ⏳ Pendiente | `v0-4-save-load-e2e` | v0.4 | Validar guardado y recuperación desde la UI. | RF-011. | E2E que guarda, reinicia/recarga y recupera el trabajo. |
@@ -78,7 +79,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** el usuario puede seleccionar PNG/SVG y la app conserva referencias persistibles por ruta.
 
-**Incluye:** copia a `app_data_dir`, validación básica de formato/tamaño y estado con rutas.
+**Incluye:** copia a `app_data_dir`, validación básica de formato/tamaño, detección de límites visibles y estado con rutas.
 
 **No incluye:** validación completa de aspect ratio; queda para `v0-2-aspect-ratio-validation`.
 
@@ -98,7 +99,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** el backend produce posiciones válidas en cm para una plancha.
 
-**Incluye:** MaxRects básico, cantidades y rechazo controlado de diseños imposibles.
+**Incluye:** MaxRects básico, cantidades, uso del área visible como rectángulo ocupado y rechazo controlado de diseños imposibles.
 
 **No incluye:** multipágina ni rotación.
 
@@ -178,7 +179,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** el backend genera PNG de impresión a 300 DPI.
 
-**Incluye:** composición en Rust con `image`, conversión cm a px para exportación y escritura de archivos.
+**Incluye:** composición en Rust con `image`, conversión cm a px para exportación, escala del arte visible a las dimensiones configuradas y escritura de archivos.
 
 **No incluye:** exportación desde Canvas ni formatos distintos a PNG.
 
