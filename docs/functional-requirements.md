@@ -108,4 +108,4 @@ Si las dimensiones configuradas deforman el diseño:
 
 La deformación deliberada requerirá confirmación explícita del usuario.
 
-El aspect ratio original se almacena en el modelo como campo explícito e inmutable y se calcula en el momento de la carga. Para PNG se extrae de `naturalWidth / naturalHeight`. Para SVG se extrae del atributo `viewBox`, no de dimensiones de píxeles que pueden no estar definidas.
+El aspect ratio original se almacena en el modelo como campo explícito e inmutable y se calcula en el momento de la carga a partir del ancho y alto de los límites visibles detectados. Para SVG, el `viewBox` puede definir el espacio inicial de rasterización, pero la proporción final sale de los límites visibles después de rasterizar y aplicar el umbral alpha.

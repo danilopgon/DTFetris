@@ -21,6 +21,8 @@ MaxRects, implementado en Rust.
 
 El rectángulo que entra a MaxRects representa el área visible del diseño en centímetros. La caja completa del archivo PNG/SVG no debe usarse como superficie ocupada si incluye transparencia alrededor del arte.
 
+Los límites visibles se detectan al importar el diseño en `v0-1-design-import` y se persisten como metadatos. MaxRects consume esos límites persistidos; no vuelve a detectar el área visible desde los archivos durante el packing.
+
 Esto protege dos invariantes de negocio:
 
 - La plancha final no reserva material por píxeles transparentes que no se imprimen.
@@ -57,11 +59,11 @@ pixels = centimeters * (dpi / 2.54)
 
 ### Pipeline de exportación
 
-1. Rust recibe las planchas y `outputPath` desde Tauri command.
+1. Rust recibe las planchas, los metadatos de límites visibles persistidos y `outputPath` desde Tauri command.
 2. Rust lee los archivos originales desde disco.
-3. Rust recorta o normaliza el área visible, ignorando padding transparente.
-4. Inputs PNG se compositan con `image` usando el área visible como base de escala.
-5. Inputs SVG se rasterizan primero con `resvg` y se ajustan a sus límites visibles.
+3. Rust aplica el recorte o transformación de píxeles fuente indicada por los límites visibles guardados, ignorando padding transparente al escalar el arte visible a las dimensiones físicas configuradas.
+4. Inputs PNG se compositan con `image` usando el área visible guardada como base de escala.
+5. Inputs SVG se rasterizan con `resvg`; la exportación usa la misma regla de umbral alpha y los límites visibles guardados desde importación.
 6. `image` composita todos los bitmaps en la plancha final.
 7. Rust escribe el PNG en disco.
 

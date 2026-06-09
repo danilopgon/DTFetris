@@ -43,7 +43,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 | 7 | ⏳ Pendiente | `v0-2-multipage-packing` | v0.2 | Generar automáticamente múltiples planchas cuando la primera se llena. | RF-007, RF-006. | Unit tests Rust con overflow controlado y conteo esperado de planchas. |
 | 8 | ⏳ Pendiente | `v0-2-rotation-support` | v0.2 | Soportar rotación opcional en packing respetando la configuración por diseño. | RF-002, RF-004, RF-006. | Tests con diseños que solo caben rotados y diseños con rotación bloqueada. |
 | 9 | ⏳ Pendiente | `v0-2-sheet-metrics` | v0.2 | Calcular y mostrar métricas por plancha y globales. | RF-009. | Tests de área usada/libre y porcentaje de ocupación. |
-| 10 | ⏳ Pendiente | `v0-2-aspect-ratio-validation` | v0.2 | Detectar proporción original PNG/SVG y advertir deformaciones. | RF-014. | Tests para PNG, SVG con `viewBox` y confirmación explícita de deformación. |
+| 10 | ⏳ Pendiente | `v0-2-aspect-ratio-validation` | v0.2 | Detectar proporción original PNG/SVG desde límites visibles y advertir deformaciones. | RF-014. | Tests para PNG, SVG rasterizado con límites visibles y confirmación explícita de deformación. |
 | 11 | ⏳ Pendiente | `v0-2-tauri-integration-tests` | v0.2 | Cubrir comandos Tauri principales con tests de integración. | RF-001, RF-006, RF-012. | Tests de carga, packing y errores de commands. |
 | 12 | ⏳ Pendiente | `v0-2-react-component-tests` | v0.2 | Agregar cobertura básica de componentes críticos con React Testing Library. | RF-002, RF-004, RF-008, RF-009. | Tests de edición, listado, métricas y estados vacíos. |
 | 13 | ⏳ Pendiente | `v0-3-png-export` | v0.3 | Exportar planchas PNG a 300 DPI desde Rust con `image`, escalando el arte visible a las dimensiones configuradas. | RF-010. | Tests Rust de dimensiones exportadas, DPI esperado, composición básica y padding transparente. |
@@ -149,7 +149,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** la app evita deformaciones accidentales.
 
-**Incluye:** extracción de proporción original, advertencia, ajuste sugerido y confirmación explícita para deformar.
+**Incluye:** extracción de proporción original desde límites visibles, advertencia, ajuste sugerido y confirmación explícita para deformar.
 
 **No incluye:** edición avanzada de imagen.
 

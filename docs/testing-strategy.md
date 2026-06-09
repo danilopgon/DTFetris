@@ -25,7 +25,7 @@ Cobertura mínima:
 - Serialización: los structs se serializan y deserializan correctamente con `serde`.
 - Paridad JSON Rust/TypeScript: los contratos Tauri usan claves `camelCase` mediante `#[serde(rename_all = "camelCase")]` y tests de round-trip con `serde_json`.
 - Validación defensiva de packing: dimensiones en centímetros enteros positivos y al menos un diseño con `quantity > 0` antes de ejecutar packing.
-- Validación de aspect ratio: detección de deformación en PNG con `naturalWidth / naturalHeight` y SVG con `viewBox`.
+- Validación de aspect ratio: detección de deformación usando los límites visibles detectados en PNG y SVG rasterizado.
 
 Ejemplos de casos:
 
@@ -104,7 +104,7 @@ Playwright se conecta a la ventana Tauri mediante WebDriver. Los escenarios cubr
 | ID | Escenario |
 |---|---|
 | E2E-001 | Carga de un diseño PNG. |
-| E2E-002 | Carga de un diseño SVG y verificación de aspect ratio desde viewBox. |
+| E2E-002 | Carga de un diseño SVG y verificación de aspect ratio desde límites visibles tras rasterización. |
 | E2E-003 | Packing básico con un único diseño. |
 | E2E-004 | Packing multipágina. |
 | E2E-005 | Modificación de cantidad y repacking automático. |
