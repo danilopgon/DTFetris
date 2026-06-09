@@ -13,6 +13,7 @@ El dominio trabaja en centímetros. Las conversiones a píxeles son detalles de 
 | Cantidad editable | Una cantidad de diseño puede ser `0` mientras se edita. |
 | Cantidad para generar | Generación/packing requiere al menos un diseño con `quantity > 0`. |
 | Aspect ratio | Se calcula al cargar la imagen y queda como campo explícito e inmutable. |
+| Transparencia en diseños | Las dimensiones configuradas aplican al área visible del arte, no al canvas completo del archivo. |
 | Deformación | Nunca automática; requiere confirmación explícita. |
 | Rutas de imagen | Se almacenan como rutas en disco dentro de `app_data_dir`, no como objetos `File`. |
 | Duplicado | Comparte la misma ruta de imagen que el original. |
@@ -53,6 +54,25 @@ Para exportación, `dpi = 300`.
 55 cm  -> 6,496 px
 100 cm -> 11,811 px
 ```
+
+## Transparencia y área visible
+
+La transparencia del archivo importado no cuenta como superficie ocupada de la plancha. El sistema debe considerar los límites del contenido visible del PNG/SVG como el área física del diseño.
+
+El área visible se define operativamente así:
+
+- Un píxel es visible si su alpha normalizado es `>= 0.01`; en alpha de 8 bits equivale a `>= 3/255`.
+- Para PNG y SVG se aplica el mismo umbral después de rasterizar. SVG se rasteriza con `resvg` antes de detectar límites visibles.
+- El contorno visible es el bounding box alineado a ejes (AABB) de todos los píxeles que cumplen el umbral.
+- Bordes semitransparentes, gradientes y sombras cuentan si su alpha cumple el umbral; por debajo del umbral se ignoran.
+- Los límites se ajustan a píxeles enteros del raster. En el MVP, la expansión de margen visible o seguridad es `0 mm`; cualquier margen o sangrado futuro debe ser configuración explícita del dominio.
+
+Ejemplo crítico:
+
+- Si el usuario configura un logo como 8 cm x 8 cm, el arte visible debe imprimirse a 8 cm x 8 cm.
+- Si el archivo fuente tiene un canvas de 8 cm x 8 cm pero el contenido opaco ocupa visualmente 4 cm x 4 cm por padding transparente, ese padding no debe provocar que el logo visible se imprima a 4 cm x 4 cm dentro de un espacio de 8 cm x 8 cm.
+
+Los límites visibles se detectan durante `v0-1-design-import` y se persisten como metadatos del diseño. Preview, packing y exportación consumen esos metadatos; no deben depender de padding transparente oculto en el archivo fuente.
 
 ## Modelo TypeScript
 

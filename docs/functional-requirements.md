@@ -8,6 +8,8 @@ El usuario podrá cargar uno o varios archivos PNG o SVG.
 
 El archivo se copiará al directorio de datos de la aplicación (`app_data_dir`) mediante la API de filesystem de Tauri. La referencia almacenada en el estado será la ruta en disco, no el objeto `File` del navegador.
 
+Al cargar un diseño, el sistema deberá identificar sus límites visibles. La transparencia alrededor del arte no formará parte del tamaño físico impreso ni de la superficie ocupada en la plancha.
+
 ## RF-002 - Configuración de diseño
 
 Cada diseño permitirá configurar:
@@ -17,6 +19,8 @@ Cada diseño permitirá configurar:
 - Alto en cm.
 - Cantidad.
 - Rotación permitida.
+
+Las dimensiones configuradas representan el tamaño físico del arte visible. Si el archivo contiene padding transparente, ese padding no reduce el tamaño final del arte ni reserva superficie adicional.
 
 ## RF-003 - Duplicado de diseño
 
@@ -64,6 +68,8 @@ El sistema mostrará métricas por plancha y globales:
 - Área libre en cm2.
 - Porcentaje de ocupación.
 
+El área utilizada se calculará sobre el rectángulo físico del arte visible colocado en la plancha, no sobre el canvas transparente del archivo fuente.
+
 ## RF-010 - Exportación
 
 El sistema permitirá exportar planchas como PNG a 300 DPI.
@@ -102,4 +108,4 @@ Si las dimensiones configuradas deforman el diseño:
 
 La deformación deliberada requerirá confirmación explícita del usuario.
 
-El aspect ratio original se almacena en el modelo como campo explícito e inmutable y se calcula en el momento de la carga. Para PNG se extrae de `naturalWidth / naturalHeight`. Para SVG se extrae del atributo `viewBox`, no de dimensiones de píxeles que pueden no estar definidas.
+El aspect ratio original se almacena en el modelo como campo explícito e inmutable y se calcula en el momento de la carga a partir del ancho y alto de los límites visibles detectados. Para SVG, el `viewBox` puede definir el espacio inicial de rasterización, pero la proporción final sale de los límites visibles después de rasterizar y aplicar el umbral alpha.

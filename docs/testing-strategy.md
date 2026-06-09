@@ -20,11 +20,12 @@ Cobertura mínima:
 - Rotación: los diseños rotan correctamente cuando `can_rotate = true`.
 - Multipágina: se generan nuevas hojas cuando la plancha se llena.
 - Cálculo de áreas: métricas por plancha y globales.
+- Transparencia: el padding transparente no cuenta como área ocupada y las dimensiones configuradas aplican al arte visible.
 - Repacking: el resultado es consistente ante modificaciones.
 - Serialización: los structs se serializan y deserializan correctamente con `serde`.
 - Paridad JSON Rust/TypeScript: los contratos Tauri usan claves `camelCase` mediante `#[serde(rename_all = "camelCase")]` y tests de round-trip con `serde_json`.
 - Validación defensiva de packing: dimensiones en centímetros enteros positivos y al menos un diseño con `quantity > 0` antes de ejecutar packing.
-- Validación de aspect ratio: detección de deformación en PNG con `naturalWidth / naturalHeight` y SVG con `viewBox`.
+- Validación de aspect ratio: detección de deformación usando los límites visibles detectados en PNG y SVG rasterizado.
 
 Ejemplos de casos:
 
@@ -57,6 +58,7 @@ Cobertura mínima:
 - Estado Zustand: plancha inicial de 55 cm x 100 cm y sincronización de configuración personalizada.
 - Conversion cm a px para distintos DPI.
 - Cálculo de aspect ratio original.
+- Detección de límites visibles en diseños con transparencia.
 - Detección de deformación por diferencia entre aspect ratio original y configurado.
 - Lógica de estado Zustand: añadir, editar, eliminar y duplicar diseños.
 - Generación de IDs únicos.
@@ -69,6 +71,7 @@ Cobertura mínima:
 
 - `run_packing`: recibe `PackingRequest`, valida el contrato de dominio y devuelve `PackingResult` con `sheets` y `unplacedItems`.
 - `export_png`: genera el archivo en la ruta especificada.
+- `export_png`: respeta que el arte visible, no el canvas transparente, ocupe las dimensiones físicas configuradas.
 - `save_job` y `load_job`: el estado guardado se recupera íntegro.
 - Manejo de errores: rutas inválidas, diseños mal formados y permisos de escritura.
 
@@ -101,7 +104,7 @@ Playwright se conecta a la ventana Tauri mediante WebDriver. Los escenarios cubr
 | ID | Escenario |
 |---|---|
 | E2E-001 | Carga de un diseño PNG. |
-| E2E-002 | Carga de un diseño SVG y verificación de aspect ratio desde viewBox. |
+| E2E-002 | Carga de un diseño SVG y verificación de aspect ratio desde límites visibles tras rasterización. |
 | E2E-003 | Packing básico con un único diseño. |
 | E2E-004 | Packing multipágina. |
 | E2E-005 | Modificación de cantidad y repacking automático. |
@@ -109,6 +112,7 @@ Playwright se conecta a la ventana Tauri mediante WebDriver. Los escenarios cubr
 | E2E-007 | Exportación PNG con inputs mixtos PNG + SVG. |
 | E2E-008 | Guardado y recuperación de trabajo. |
 | E2E-009 | Advertencia de deformación de aspecto. |
+| E2E-010 | Diseño con padding transparente se imprime con el arte visible al tamaño configurado. |
 
 Visual regression es obligatoria mediante snapshots de Playwright.
 
