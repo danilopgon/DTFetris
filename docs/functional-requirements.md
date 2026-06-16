@@ -2,13 +2,17 @@
 
 Estos requisitos describen el comportamiento visible del MVP. Las reglas técnicas relacionadas viven en [domain-and-data-model.md](./domain-and-data-model.md), [architecture-and-stack.md](./architecture-and-stack.md) y [packing-and-export.md](./packing-and-export.md).
 
-## RF-001 - Carga de diseños
+## RF-001 - Importación de diseños
 
-El usuario podrá cargar uno o varios archivos PNG o SVG.
+El usuario importará un único archivo PNG o SVG por operación. Cada importación exitosa agrega un diseño a la lista existente sin reemplazar los anteriores (acumulativo).
 
-El archivo se copiará al directorio de datos de la aplicación (`app_data_dir`) mediante la API de filesystem de Tauri. La referencia almacenada en el estado será la ruta en disco, no el objeto `File` del navegador.
+Antes de confirmar la importación, el usuario debe introducir el ancho y alto en centímetros del arte visible. El sistema no infiere dimensiones físicas a partir del `viewBox` ni de los metadatos del archivo.
 
-Al cargar un diseño, el sistema deberá identificar sus límites visibles. La transparencia alrededor del arte no formará parte del tamaño físico impreso ni de la superficie ocupada en la plancha.
+El archivo se copia al directorio de datos de la aplicación (`app_data_dir/design-assets/{uuid}.{ext}`) mediante el comando `import_design` en Rust. La referencia almacenada en el estado será la ruta copiada en disco, no el objeto `File` del navegador ni la ruta original del usuario.
+
+Al importar un diseño, el sistema detecta los límites visibles (bounding box sin padding transparente) usando la crate `image` para PNG y `resvg` para SVG. La transparencia alrededor del arte no forma parte del tamaño físico impreso ni de la superficie ocupada en la plancha.
+
+Si el archivo está ausente, tiene formato no soportado, es malformado, o el área visible es completamente transparente, el sistema rechaza la importación con un mensaje de error en español y no añade ningún diseño a la lista.
 
 ## RF-002 - Configuración de diseño
 

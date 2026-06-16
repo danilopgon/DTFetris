@@ -11,12 +11,14 @@ DTFetris es una aplicación de escritorio Tauri 2 con frontend React/TypeScript 
 | Estado | Zustand 5 |
 | Preview | React Konva + Konva |
 | Estilos | Tailwind CSS 3 |
+| Diálogo de archivo | `@tauri-apps/plugin-dialog` 2 (`open()` con filtros PNG/SVG) |
 | Backend local | Rust 2021 via Tauri commands |
+| Plugin diálogo Rust | `tauri-plugin-dialog` 2 |
 | Serialización | `serde`, `serde_json` |
 | Exportación PNG | `image` 0.25 |
 | Rasterización SVG | `resvg` 0.43 con `tiny-skia` internamente |
 | IDs | `uuid` con feature `v4` |
-| Unit tests TS | Vitest, jsdom, React Testing Library |
+| Unit tests TS | Vitest, jsdom, React Testing Library, `@testing-library/user-event` |
 | E2E | Playwright |
 
 ## Comandos principales
@@ -49,6 +51,28 @@ El contrato de packing usa un único payload `PackingRequest` con `sheet` y `des
 Los valores de dominio que viajan por el comando son códigos técnicos estables. Por ejemplo, `UnplacedItem.reason` usa valores como `does_not_fit`, no textos de interfaz en español. La UI es responsable de mapear esos códigos a mensajes visibles.
 
 Los errores se modelan como `Result<T, String>` en Rust y se mapean a `Promise` rechazadas en TypeScript.
+
+### Comando de importación
+
+```rust
+#[tauri::command]
+async fn import_design(
+    app: AppHandle,
+    source_path: String,
+    width_cm: f64,
+    height_cm: f64,
+) -> Result<DesignInput, String> { ... }
+```
+
+```typescript
+// El componente abre el diálogo primero, luego llama al comando:
+const path = await open({ multiple: false, filters: [{ name: 'Imágenes', extensions: ['png', 'svg'] }] })
+if (path) {
+  const design = await invoke<DesignInput>('import_design', { sourcePath: path, widthCm, heightCm })
+}
+```
+
+El flujo de importación es: el componente `DesignList` abre el selector de archivo via `@tauri-apps/plugin-dialog`, obtiene la ruta seleccionada, y llama al store action `importDesign({ sourcePath, widthCm, heightCm })`. El store action delega en el command wrapper `src/commands/index.ts`, que invoca `import_design` en Rust. Rust valida el archivo, detecta los límites visibles y copia el archivo a `app_data_dir/design-assets/{uuid}.{ext}`, devolviendo un `DesignInput` completo.
 
 ## Persistencia
 

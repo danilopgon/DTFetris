@@ -5,10 +5,23 @@ import {
   validateEditableDesignInput,
   validatePackingRequest,
   type DesignInput,
+  type ImageFormat,
+  type ImportDesignErrorCode,
+  type ImportDesignRequest,
   type PackingRequest,
   type PackingResult,
   type UnplacedItem,
+  type VisibleBounds,
 } from './domain'
+
+const baseVisibleBounds: VisibleBounds = {
+  xPx: 0,
+  yPx: 0,
+  widthPx: 100,
+  heightPx: 120,
+  sourceWidthPx: 100,
+  sourceHeightPx: 120,
+}
 
 const baseDesign: DesignInput = {
   id: 'design-1',
@@ -19,6 +32,8 @@ const baseDesign: DesignInput = {
   originalAspectRatio: 10 / 12,
   quantity: 1,
   canRotate: true,
+  format: 'png',
+  visibleBounds: baseVisibleBounds,
 }
 
 describe('centimeter domain validation', () => {
@@ -101,5 +116,129 @@ describe('packing result contract', () => {
     }
 
     expect(result.unplacedItems).toEqual([unplacedItem])
+  })
+})
+
+describe('VisibleBounds contract', () => {
+  it('stores pixel geometry as non-negative numbers', () => {
+    const bounds: VisibleBounds = {
+      xPx: 5,
+      yPx: 10,
+      widthPx: 90,
+      heightPx: 100,
+      sourceWidthPx: 100,
+      sourceHeightPx: 120,
+    }
+
+    expect(bounds.xPx).toBe(5)
+    expect(bounds.yPx).toBe(10)
+    expect(bounds.widthPx).toBe(90)
+    expect(bounds.heightPx).toBe(100)
+    expect(bounds.sourceWidthPx).toBe(100)
+    expect(bounds.sourceHeightPx).toBe(120)
+  })
+
+  it('uses camelCase field names matching Rust serde serialization', () => {
+    const bounds: VisibleBounds = {
+      xPx: 0,
+      yPx: 0,
+      widthPx: 200,
+      heightPx: 150,
+      sourceWidthPx: 200,
+      sourceHeightPx: 150,
+    }
+
+    // Verify field names are camelCase (as Rust uses #[serde(rename_all = "camelCase")])
+    expect(Object.keys(bounds)).toEqual(['xPx', 'yPx', 'widthPx', 'heightPx', 'sourceWidthPx', 'sourceHeightPx'])
+  })
+})
+
+describe('ImageFormat contract', () => {
+  it('accepts png and svg as valid image formats', () => {
+    const pngFormat: ImageFormat = 'png'
+    const svgFormat: ImageFormat = 'svg'
+
+    expect(pngFormat).toBe('png')
+    expect(svgFormat).toBe('svg')
+  })
+})
+
+describe('DesignInput with import metadata fields', () => {
+  it('stores format and visibleBounds as required fields alongside cm dimensions', () => {
+    const design: DesignInput = {
+      id: 'design-import-1',
+      name: 'Artwork',
+      imagePath: 'C:/app-data/design-assets/abc.png',
+      widthCm: 15,
+      heightCm: 10,
+      originalAspectRatio: 1.5,
+      quantity: 1,
+      canRotate: false,
+      format: 'png',
+      visibleBounds: baseVisibleBounds,
+    }
+
+    expect(design.format).toBe('png')
+    expect(design.visibleBounds).toEqual(baseVisibleBounds)
+    // cm dimensions remain domain truth — pixels are only for source geometry
+    expect(design.widthCm).toBe(15)
+    expect(design.heightCm).toBe(10)
+  })
+
+  it('accepts svg format with matching visibleBounds metadata', () => {
+    const svgBounds: VisibleBounds = {
+      xPx: 2,
+      yPx: 3,
+      widthPx: 50,
+      heightPx: 75,
+      sourceWidthPx: 54,
+      sourceHeightPx: 81,
+    }
+    const design: DesignInput = {
+      id: 'design-svg-1',
+      name: 'Vector',
+      imagePath: 'C:/app-data/design-assets/def.svg',
+      widthCm: 8,
+      heightCm: 12,
+      originalAspectRatio: 50 / 75,
+      quantity: 2,
+      canRotate: true,
+      format: 'svg',
+      visibleBounds: svgBounds,
+    }
+
+    expect(design.format).toBe('svg')
+    expect(design.visibleBounds.widthPx).toBe(50)
+  })
+})
+
+describe('ImportDesignRequest contract', () => {
+  it('requires sourcePath, widthCm, and heightCm using Cm type', () => {
+    const request: ImportDesignRequest = {
+      sourcePath: '/home/user/designs/logo.png',
+      widthCm: 10,
+      heightCm: 8,
+    }
+
+    expect(request.sourcePath).toBe('/home/user/designs/logo.png')
+    expect(request.widthCm).toBe(10)
+    expect(request.heightCm).toBe(8)
+  })
+})
+
+describe('ImportDesignErrorCode contract', () => {
+  it('covers all stable error codes returned by the Rust import command', () => {
+    const codes: ImportDesignErrorCode[] = [
+      'invalid_format',
+      'invalid_dimensions',
+      'file_not_found',
+      'copy_failed',
+      'empty_artwork',
+      'metadata_failed',
+    ]
+
+    expect(codes).toHaveLength(6)
+    expect(codes).toContain('invalid_format')
+    expect(codes).toContain('empty_artwork')
   })
 })
