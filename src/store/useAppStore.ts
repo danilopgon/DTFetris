@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { DEFAULT_SHEET_CONFIG, type DesignInput, type Sheet, type SheetConfig } from '../types/domain'
+import { importDesign as importDesignCommand } from '../commands'
+import { DEFAULT_SHEET_CONFIG, type DesignInput, type ImportDesignRequest, type Sheet, type SheetConfig } from '../types/domain'
 
 type AppState = {
   designs: DesignInput[]
@@ -10,6 +11,7 @@ type AppState = {
   isOptimizing: boolean
   addDesign: (design: DesignInput) => void
   removeDesign: (id: string) => void
+  importDesign: (request: ImportDesignRequest) => Promise<DesignInput>
   setSheets: (sheets: Sheet[]) => void
   setSheetSize: (widthCm: number, heightCm: number) => void
   setOptimizing: (value: boolean) => void
@@ -24,6 +26,11 @@ export const useAppStore = create<AppState>((set) => ({
   isOptimizing: false,
   addDesign: (design) => set((state) => ({ designs: [...state.designs, design] })),
   removeDesign: (id) => set((state) => ({ designs: state.designs.filter((d) => d.id !== id) })),
+  importDesign: async (request) => {
+    const design = await importDesignCommand(request)
+    set((state) => ({ designs: [...state.designs, design] }))
+    return design
+  },
   setSheets: (sheets) => set({ sheets }),
   setSheetSize: (widthCm, heightCm) =>
     set({ sheetConfig: { widthCm, heightCm }, sheetWidthCm: widthCm, sheetHeightCm: heightCm }),

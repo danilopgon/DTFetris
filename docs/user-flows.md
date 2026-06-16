@@ -2,13 +2,26 @@
 
 Estos flujos muestran cómo viajan los datos entre usuario, frontend y backend Rust.
 
-## Cargar diseños
+## Importar diseño
 
 ```text
-Usuario carga PNG o SVG
-  -> Tauri copia el archivo a app_data_dir
-  -> Frontend almacena la ruta en disco como string
-  -> Sistema detecta los límites visibles e ignora padding transparente para medidas físicas
+Usuario introduce ancho y alto en cm en el panel lateral
+  -> Usuario pulsa "Importar diseño"
+  -> Se abre el selector de archivo (filtro: PNG y SVG únicamente)
+  -> Si el usuario cancela: flujo termina, no hay cambios
+  -> Si el usuario selecciona un archivo:
+       -> Frontend llama a store.importDesign({ sourcePath, widthCm, heightCm })
+       -> Rust valida extensión, lee el archivo y detecta los límites visibles
+       -> Rust copia el archivo a app_data_dir/design-assets/{uuid}.{ext}
+       -> Rust devuelve DesignInput con format, visibleBounds y cm confirmados
+       -> Frontend añade el diseño a la lista (acumulativo, no reemplaza)
+  -> Si hay error: se muestra mensaje en español; la lista no cambia
+
+Errores posibles y mensajes en español:
+  - invalid_format  → "Formato no soportado. Solo se aceptan archivos PNG y SVG."
+  - empty_artwork   → "El diseño está vacío o es completamente transparente."
+  - file_not_found  → "No se encontró el archivo seleccionado."
+  - copy_failed     → "Error al guardar el diseño. Comprueba el espacio en disco."
 ```
 
 ## Configurar y generar planchas

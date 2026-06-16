@@ -1,5 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { PackingRequest, PackingResult, Sheet } from '../types/domain'
+import type { DesignInput, ImportDesignRequest, PackingRequest, PackingResult, Sheet } from '../types/domain'
+
+export async function importDesign(request: ImportDesignRequest): Promise<DesignInput> {
+  return invoke('import_design', request)
+}
 
 export async function runPacking(request: PackingRequest): Promise<PackingResult> {
   return invoke('run_packing', { request })

@@ -14,9 +14,20 @@ pub fn run_packing(request: PackingRequest) -> Result<PackingResult, String> {
 mod tests {
     use super::run_packing;
     use crate::domain::{
-        design::DesignInput,
+        design::{DesignInput, ImageFormat, VisibleBounds},
         packing::{PackingRequest, SheetConfig},
     };
+
+    fn sample_visible_bounds() -> VisibleBounds {
+        VisibleBounds {
+            x_px: 0.0,
+            y_px: 0.0,
+            width_px: 120.0,
+            height_px: 80.0,
+            source_width_px: 120.0,
+            source_height_px: 80.0,
+        }
+    }
 
     fn valid_request() -> PackingRequest {
         PackingRequest {
@@ -30,6 +41,8 @@ mod tests {
                 image_path: "C:/assets/logo.png".to_string(),
                 width_cm: 12.0,
                 height_cm: 8.0,
+                format: ImageFormat::Png,
+                visible_bounds: sample_visible_bounds(),
                 original_aspect_ratio: 1.5,
                 quantity: 1,
                 can_rotate: true,

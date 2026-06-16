@@ -96,15 +96,20 @@ Cobertura mínima:
 - Lista de diseños: renderizado, duplicado y eliminación.
 - Panel de métricas: valores por plancha y globales.
 - Preview de planchas: renderizado correcto del número de hojas.
+- Flujo de importación (`DesignList`): botón visible, inputs de cm positivos, estado de carga durante import, mapeo de códigos de error a mensajes en español, cancelación de diálogo sin efecto.
+
+El archivo de test es `src/components/DesignList/DesignList.test.tsx`. Usa React Testing Library con `@testing-library/user-event`. Los mocks cubren `@tauri-apps/plugin-dialog` (función `open`) y `../../store/useAppStore` (selector-aware mock con `importDesign` como `vi.fn()`). La función `mapImportErrorToMessage` se extrae como función pura y se testea sin mocks.
 
 ## E2E + visual regression
 
 Playwright se conecta a la ventana Tauri mediante WebDriver. Los escenarios cubren flujos completos de usuario.
 
+Los tests E2E de importación (E2E-001, E2E-002) están diferidos al roadmap posterior a `v0-1-design-import`. El flujo de importación se valida con RTL a nivel de componente y con `cargo test` a nivel de Rust. No son un bloqueador del runner actual.
+
 | ID | Escenario |
 |---|---|
-| E2E-001 | Carga de un diseño PNG. |
-| E2E-002 | Carga de un diseño SVG y verificación de aspect ratio desde límites visibles tras rasterización. |
+| E2E-001 | Importación de un diseño PNG. (diferido — roadmap posterior) |
+| E2E-002 | Importación de un diseño SVG y verificación de aspect ratio desde límites visibles. (diferido) |
 | E2E-003 | Packing básico con un único diseño. |
 | E2E-004 | Packing multipágina. |
 | E2E-005 | Modificación de cantidad y repacking automático. |

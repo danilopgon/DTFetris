@@ -1,5 +1,30 @@
 export type Cm = number
 
+export type ImageFormat = 'png' | 'svg'
+
+export type VisibleBounds = {
+  xPx: number
+  yPx: number
+  widthPx: number
+  heightPx: number
+  sourceWidthPx: number
+  sourceHeightPx: number
+}
+
+export type ImportDesignRequest = {
+  sourcePath: string
+  widthCm: Cm
+  heightCm: Cm
+}
+
+export type ImportDesignErrorCode =
+  | 'invalid_format'
+  | 'invalid_dimensions'
+  | 'file_not_found'
+  | 'copy_failed'
+  | 'empty_artwork'
+  | 'metadata_failed'
+
 export type SheetConfig = {
   widthCm: Cm
   heightCm: Cm
@@ -19,6 +44,8 @@ export type DesignInput = {
   originalAspectRatio: number
   quantity: number
   canRotate: boolean
+  format: ImageFormat
+  visibleBounds: VisibleBounds
 }
 
 export type Placement = {

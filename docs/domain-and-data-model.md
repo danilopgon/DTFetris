@@ -79,6 +79,31 @@ Los límites visibles se detectan durante `v0-1-design-import` y se persisten co
 ```typescript
 type Cm = number
 
+type ImageFormat = 'png' | 'svg'
+
+type VisibleBounds = {
+  xPx: number
+  yPx: number
+  widthPx: number
+  heightPx: number
+  sourceWidthPx: number
+  sourceHeightPx: number
+}
+
+type ImportDesignRequest = {
+  sourcePath: string
+  widthCm: Cm
+  heightCm: Cm
+}
+
+type ImportDesignErrorCode =
+  | 'invalid_format'
+  | 'invalid_dimensions'
+  | 'file_not_found'
+  | 'copy_failed'
+  | 'empty_artwork'
+  | 'metadata_failed'
+
 type SheetConfig = {
   widthCm: Cm
   heightCm: Cm
@@ -87,12 +112,14 @@ type SheetConfig = {
 type DesignInput = {
   id: string
   name: string
-  imagePath: string
-  widthCm: Cm
-  heightCm: Cm
-  originalAspectRatio: number
+  imagePath: string      // ruta en app_data_dir/design-assets/{uuid}.{ext}
+  widthCm: Cm            // centímetros confirmados por el usuario
+  heightCm: Cm           // centímetros confirmados por el usuario
+  originalAspectRatio: number  // visibleWidthPx / visibleHeightPx del arte
   quantity: number
   canRotate: boolean
+  format: ImageFormat           // 'png' | 'svg'
+  visibleBounds: VisibleBounds  // límites del arte sin padding transparente
 }
 
 type Placement = {
@@ -134,7 +161,11 @@ type PackingResult = {
 }
 ```
 
-Los códigos como `does_not_fit` son valores técnicos estables y neutrales. La UI debe mapearlos a textos en español cuando corresponda; no deben guardarse como copy de interfaz.
+Los códigos técnicos como `does_not_fit` o `invalid_format` son valores estables y neutrales. La UI mapea estos códigos a mensajes en español; no se almacenan como copy de interfaz.
+
+`DesignInput.imagePath` siempre apunta a una copia dentro de `app_data_dir/design-assets/`. La ruta original del usuario no se persiste. Importar el mismo archivo dos veces produce dos copias con UUIDs distintos.
+
+`DesignInput.widthCm` y `DesignInput.heightCm` son las dimensiones físicas confirmadas por el usuario. No derivan del `viewBox` SVG ni de las dimensiones en píxeles del archivo fuente. `VisibleBounds` se usa exclusivamente para metadatos de calidad de fuente, no como dimensiones físicas.
 
 ### Validación TypeScript
 
@@ -144,20 +175,41 @@ Los códigos como `does_not_fit` son valores técnicos estables y neutrales. La 
 
 ## Modelo Rust
 
+Los structs usan `#[serde(rename_all = "camelCase")]` para mantener paridad con el contrato JSON del frontend.
+
 ```rust
 #[derive(Serialize, Deserialize)]
-struct DesignInput {
-    id: String,
-    name: String,
-    image_path: String,
-    width_cm: f64,
-    height_cm: f64,
-    original_aspect_ratio: f64,
-    quantity: u32,
-    can_rotate: bool,
+#[serde(rename_all = "camelCase")]
+enum ImageFormat { Png, Svg }
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VisibleBounds {
+    x_px: u32,
+    y_px: u32,
+    width_px: u32,
+    height_px: u32,
+    source_width_px: u32,
+    source_height_px: u32,
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DesignInput {
+    id: String,
+    name: String,
+    image_path: String,      // app_data_dir/design-assets/{uuid}.{ext}
+    width_cm: f64,           // centímetros confirmados por el usuario
+    height_cm: f64,          // centímetros confirmados por el usuario
+    original_aspect_ratio: f64,
+    quantity: u32,
+    can_rotate: bool,
+    format: ImageFormat,
+    visible_bounds: VisibleBounds,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Placement {
     design_id: String,
     x_cm: f64,
@@ -168,6 +220,7 @@ struct Placement {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Sheet {
     id: String,
     width_cm: f64,

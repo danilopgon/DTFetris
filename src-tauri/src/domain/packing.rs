@@ -78,8 +78,19 @@ mod tests {
         validate_packing_request, PackingRequest, PackingResult, SheetConfig, UnplacedItem,
         UnplacedReasonCode,
     };
-    use crate::domain::design::{DesignInput, Sheet};
+    use crate::domain::design::{DesignInput, ImageFormat, Sheet, VisibleBounds};
     use serde_json::json;
+
+    fn sample_visible_bounds() -> VisibleBounds {
+        VisibleBounds {
+            x_px: 0.0,
+            y_px: 0.0,
+            width_px: 120.0,
+            height_px: 80.0,
+            source_width_px: 120.0,
+            source_height_px: 80.0,
+        }
+    }
 
     fn valid_design(quantity: u32) -> DesignInput {
         DesignInput {
@@ -88,6 +99,8 @@ mod tests {
             image_path: "C:/assets/logo.png".to_string(),
             width_cm: 12.0,
             height_cm: 8.0,
+            format: ImageFormat::Png,
+            visible_bounds: sample_visible_bounds(),
             original_aspect_ratio: 1.5,
             quantity,
             can_rotate: true,
@@ -104,6 +117,15 @@ mod tests {
                 "imagePath": "C:/assets/logo.png",
                 "widthCm": 12.0,
                 "heightCm": 8.0,
+                "format": "png",
+                "visibleBounds": {
+                    "xPx": 0.0,
+                    "yPx": 0.0,
+                    "widthPx": 120.0,
+                    "heightPx": 80.0,
+                    "sourceWidthPx": 120.0,
+                    "sourceHeightPx": 80.0
+                },
                 "originalAspectRatio": 1.5,
                 "quantity": 2,
                 "canRotate": true
