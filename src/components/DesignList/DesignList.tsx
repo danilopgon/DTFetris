@@ -2,25 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { useState } from 'react'
 import { useAppStore } from '../../store/useAppStore'
 import type { ImportDesignErrorCode } from '../../types/domain'
-
-export function mapImportErrorToMessage(code: string): string {
-  switch (code) {
-    case 'invalid_format':
-      return 'Formato no soportado. Solo se aceptan archivos PNG y SVG.'
-    case 'empty_artwork':
-      return 'El diseño está vacío o es completamente transparente.'
-    case 'file_not_found':
-      return 'No se encontró el archivo seleccionado.'
-    case 'copy_failed':
-      return 'Error al guardar el diseño. Comprueba el espacio en disco.'
-    case 'invalid_dimensions':
-      return 'Las dimensiones deben ser valores positivos.'
-    case 'metadata_failed':
-      return 'Error al procesar el archivo de imagen.'
-    default:
-      return 'Error desconocido al importar el diseño.'
-  }
-}
+import { mapImportErrorToMessage } from '../../utils/importErrors'
 
 export default function DesignList() {
   const designs = useAppStore((state) => state.designs)
@@ -33,23 +15,22 @@ export default function DesignList() {
 
   const parsedWidth = parseFloat(widthCm)
   const parsedHeight = parseFloat(heightCm)
-  const isValid = !isNaN(parsedWidth) && parsedWidth > 0 && !isNaN(parsedHeight) && parsedHeight > 0
+  const isValid = Number.isInteger(parsedWidth) && parsedWidth > 0 && Number.isInteger(parsedHeight) && parsedHeight > 0
   const isDisabled = !isValid || isImporting
 
   async function handleImport() {
     setErrorMessage(null)
-
-    const selectedPath = await open({
-      multiple: false,
-      filters: [{ name: 'Imágenes PNG y SVG', extensions: ['png', 'svg'] }],
-    })
-
-    if (!selectedPath || Array.isArray(selectedPath)) {
-      return
-    }
-
     setIsImporting(true)
     try {
+      const selectedPath = await open({
+        multiple: false,
+        filters: [{ name: 'Imágenes PNG y SVG', extensions: ['png', 'svg'] }],
+      })
+
+      if (!selectedPath || Array.isArray(selectedPath)) {
+        return
+      }
+
       await importDesign({
         sourcePath: selectedPath,
         widthCm: parsedWidth,
@@ -75,8 +56,8 @@ export default function DesignList() {
           <input
             id="design-width-cm"
             type="number"
-            min={0.1}
-            step={0.1}
+            min={1}
+            step={1}
             value={widthCm}
             onChange={(e) => setWidthCm(e.target.value)}
             placeholder="ej. 10"
@@ -91,8 +72,8 @@ export default function DesignList() {
           <input
             id="design-height-cm"
             type="number"
-            min={0.1}
-            step={0.1}
+            min={1}
+            step={1}
             value={heightCm}
             onChange={(e) => setHeightCm(e.target.value)}
             placeholder="ej. 8"

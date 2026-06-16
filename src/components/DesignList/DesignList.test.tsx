@@ -2,7 +2,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesignInput, VisibleBounds } from '../../types/domain'
-import DesignList, { mapImportErrorToMessage } from './DesignList'
+import DesignList from './DesignList'
+import { mapImportErrorToMessage } from '../../utils/importErrors'
 
 // Mock the dialog plugin — the component calls open() from here
 vi.mock('@tauri-apps/plugin-dialog', () => ({

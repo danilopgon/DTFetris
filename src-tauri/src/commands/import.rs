@@ -125,14 +125,17 @@ fn detect_png_bounds(path: &Path) -> Result<VisibleBounds, ImportError> {
 
     let (width, height) = (img.width(), img.height());
     let data = img.as_raw();
-    // PNG: alpha > 0 (any non-transparent pixel)
-    visible_bounds_from_rgba(data, width, height, 1)
+    // PNG: alpha >= 3/255 — matches the SVG scan threshold; filters subpixel noise
+    visible_bounds_from_rgba(data, width, height, 3)
 }
 
 /// Detect visible bounds for an SVG file.
 /// Rasterizes the SVG using its intrinsic size (or viewBox as pixels), then scans alpha.
 fn detect_svg_bounds(path: &Path) -> Result<VisibleBounds, ImportError> {
-    let svg_data = std::fs::read(path).map_err(|_| ImportError::FileNotFound)?;
+    let svg_data = std::fs::read(path).map_err(|err| match err.kind() {
+        std::io::ErrorKind::NotFound => ImportError::FileNotFound,
+        _ => ImportError::MetadataFailed,
+    })?;
 
     let opt = resvg::usvg::Options::default();
     let tree = resvg::usvg::Tree::from_data(&svg_data, &opt)
