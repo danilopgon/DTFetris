@@ -5,7 +5,6 @@ import type { DesignInput, VisibleBounds } from '../../types/domain'
 import DesignList from './DesignList'
 import { mapImportErrorToMessage } from '../../utils/importErrors'
 
-// Mock the dialog plugin — the component calls open() from here
 vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn(),
 }))
@@ -14,7 +13,6 @@ import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
 
 const openMock = vi.mocked(dialogOpen)
 
-// Mock the Zustand store with a selector-aware implementation
 const mockImportDesign = vi.fn()
 const mockDesigns: DesignInput[] = []
 
@@ -48,6 +46,8 @@ const sampleDesign: DesignInput = {
   format: 'png',
   visibleBounds: baseVisibleBounds,
 }
+
+// ─── pure function tests ──────────────────────────────────────────────────────
 
 describe('mapImportErrorToMessage (pure function)', () => {
   it('maps invalid_format to the correct Spanish message', () => {
@@ -93,6 +93,8 @@ describe('mapImportErrorToMessage (pure function)', () => {
   })
 })
 
+// ─── component tests ──────────────────────────────────────────────────────────
+
 describe('DesignList import UI', () => {
   beforeEach(() => {
     mockImportDesign.mockReset()
@@ -105,7 +107,28 @@ describe('DesignList import UI', () => {
     cleanup()
   })
 
-  it('renders a "Importar diseño" button', () => {
+  // helpers
+  async function selectFile(path = '/path/to/logo.png') {
+    openMock.mockResolvedValueOnce(path)
+    await userEvent.click(screen.getByRole('button', { name: /seleccionar/i }))
+    await waitFor(() => expect(openMock).toHaveBeenCalled())
+  }
+
+  async function fillDims(width = '10', height = '8') {
+    await userEvent.type(screen.getByLabelText(/ancho/i), width)
+    await userEvent.type(screen.getByLabelText(/alto/i), height)
+  }
+
+  // ── renders ──────────────────────────────────────────────────────────────────
+
+  it('renders a file selector button', () => {
+    render(<DesignList />)
+    expect(
+      screen.getByRole('button', { name: /seleccionar archivo png o svg/i })
+    ).toBeInTheDocument()
+  })
+
+  it('renders an "Importar diseño" button', () => {
     render(<DesignList />)
     expect(screen.getByRole('button', { name: /importar diseño/i })).toBeInTheDocument()
   })
@@ -116,59 +139,95 @@ describe('DesignList import UI', () => {
     expect(screen.getByLabelText(/alto/i)).toBeInTheDocument()
   })
 
-  it('disables the submit button when widthCm input is empty', async () => {
+  // ── file selection ────────────────────────────────────────────────────────────
+
+  it('clicking the file selector button opens the file dialog', async () => {
+    openMock.mockResolvedValueOnce(null)
     render(<DesignList />)
-    const heightInput = screen.getByLabelText(/alto/i)
-    await userEvent.type(heightInput, '10')
+    await userEvent.click(screen.getByRole('button', { name: /seleccionar/i }))
+    expect(openMock).toHaveBeenCalledWith({
+      multiple: false,
+      filters: [{ name: 'Imágenes PNG y SVG', extensions: ['png', 'svg'] }],
+    })
+  })
+
+  it('shows the selected filename after a successful file selection', async () => {
+    render(<DesignList />)
+    await selectFile('/designs/logo.png')
+    expect(screen.getByText('logo.png')).toBeInTheDocument()
+  })
+
+  it('does not change the displayed text when dialog is cancelled', async () => {
+    openMock.mockResolvedValueOnce(null)
+    render(<DesignList />)
+    await userEvent.click(screen.getByRole('button', { name: /seleccionar/i }))
+    await waitFor(() => expect(openMock).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: /seleccionar/i })).toHaveTextContent(
+      'Seleccionar PNG o SVG'
+    )
+  })
+
+  it('shows an error when the file dialog throws', async () => {
+    openMock.mockRejectedValueOnce(new Error('Permission denied'))
+    render(<DesignList />)
+    await userEvent.click(screen.getByRole('button', { name: /seleccionar/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'No se pudo abrir el selector de archivos.'
+      )
+    })
+  })
+
+  // ── import button state ───────────────────────────────────────────────────────
+
+  it('import button is disabled when no file is selected', () => {
+    render(<DesignList />)
     expect(screen.getByRole('button', { name: /importar diseño/i })).toBeDisabled()
   })
 
-  it('disables the submit button when heightCm input is empty', async () => {
+  it('import button is disabled when file is selected but widthCm is empty', async () => {
     render(<DesignList />)
-    const widthInput = screen.getByLabelText(/ancho/i)
-    await userEvent.type(widthInput, '10')
+    await selectFile()
+    await userEvent.type(screen.getByLabelText(/alto/i), '10')
     expect(screen.getByRole('button', { name: /importar diseño/i })).toBeDisabled()
   })
 
-  it('disables the submit button when widthCm is zero', async () => {
+  it('import button is disabled when file is selected but heightCm is empty', async () => {
     render(<DesignList />)
-    const widthInput = screen.getByLabelText(/ancho/i)
-    const heightInput = screen.getByLabelText(/alto/i)
-    await userEvent.type(widthInput, '0')
-    await userEvent.type(heightInput, '10')
+    await selectFile()
+    await userEvent.type(screen.getByLabelText(/ancho/i), '10')
     expect(screen.getByRole('button', { name: /importar diseño/i })).toBeDisabled()
   })
 
-  it('disables the submit button when heightCm is zero', async () => {
+  it('import button is disabled when file is selected but widthCm is zero', async () => {
     render(<DesignList />)
-    const widthInput = screen.getByLabelText(/ancho/i)
-    const heightInput = screen.getByLabelText(/alto/i)
-    await userEvent.type(widthInput, '10')
-    await userEvent.type(heightInput, '0')
+    await selectFile()
+    await fillDims('0', '10')
     expect(screen.getByRole('button', { name: /importar diseño/i })).toBeDisabled()
   })
 
-  it('enables the submit button when both widthCm and heightCm are positive', async () => {
+  it('import button is disabled when file is selected but heightCm is zero', async () => {
     render(<DesignList />)
-    const widthInput = screen.getByLabelText(/ancho/i)
-    const heightInput = screen.getByLabelText(/alto/i)
-    await userEvent.type(widthInput, '10')
-    await userEvent.type(heightInput, '8')
+    await selectFile()
+    await fillDims('10', '0')
+    expect(screen.getByRole('button', { name: /importar diseño/i })).toBeDisabled()
+  })
+
+  it('import button is enabled when file is selected and both dimensions are positive integers', async () => {
+    render(<DesignList />)
+    await selectFile()
+    await fillDims('10', '8')
     expect(screen.getByRole('button', { name: /importar diseño/i })).not.toBeDisabled()
   })
 
-  it('opens the file dialog and calls importDesign when the button is clicked with valid inputs', async () => {
-    openMock.mockResolvedValueOnce('/path/to/logo.png')
+  // ── import flow ───────────────────────────────────────────────────────────────
+
+  it('calls importDesign with the selected path and confirmed dimensions', async () => {
     mockImportDesign.mockResolvedValueOnce(sampleDesign)
-
     render(<DesignList />)
-    const widthInput = screen.getByLabelText(/ancho/i)
-    const heightInput = screen.getByLabelText(/alto/i)
-    await userEvent.type(widthInput, '10')
-    await userEvent.type(heightInput, '8')
-
-    const button = screen.getByRole('button', { name: /importar diseño/i })
-    await userEvent.click(button)
+    await selectFile('/path/to/logo.png')
+    await fillDims('10', '8')
+    await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
 
     await waitFor(() => {
       expect(mockImportDesign).toHaveBeenCalledWith({
@@ -184,15 +243,11 @@ describe('DesignList import UI', () => {
     const pendingImport = new Promise<DesignInput>((resolve) => {
       resolveImport = resolve
     })
-    openMock.mockResolvedValueOnce('/path/to/logo.png')
     mockImportDesign.mockReturnValueOnce(pendingImport)
 
     render(<DesignList />)
-    const widthInput = screen.getByLabelText(/ancho/i)
-    const heightInput = screen.getByLabelText(/alto/i)
-    await userEvent.type(widthInput, '10')
-    await userEvent.type(heightInput, '8')
-
+    await selectFile()
+    await fillDims()
     await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
 
     await waitFor(() => {
@@ -201,35 +256,42 @@ describe('DesignList import UI', () => {
 
     resolveImport(sampleDesign)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /importar diseño/i })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: /importar diseño/i })).toBeDisabled()
     })
   })
 
-  it('shows no error message after a successful import', async () => {
-    openMock.mockResolvedValueOnce('/path/to/logo.png')
+  it('clears the form and selected file after a successful import', async () => {
     mockImportDesign.mockResolvedValueOnce(sampleDesign)
-
     render(<DesignList />)
-    const widthInput = screen.getByLabelText(/ancho/i)
-    const heightInput = screen.getByLabelText(/alto/i)
-    await userEvent.type(widthInput, '10')
-    await userEvent.type(heightInput, '8')
-
+    await selectFile('/path/to/logo.png')
+    await fillDims('10', '8')
     await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
 
     await waitFor(() => {
-      expect(mockImportDesign).toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: /seleccionar/i })).toHaveTextContent(
+        'Seleccionar PNG o SVG'
+      )
     })
+    expect(screen.getByLabelText(/ancho/i)).toHaveValue(null)
+    expect(screen.getByLabelText(/alto/i)).toHaveValue(null)
+  })
+
+  it('shows no error message after a successful import', async () => {
+    mockImportDesign.mockResolvedValueOnce(sampleDesign)
+    render(<DesignList />)
+    await selectFile()
+    await fillDims()
+    await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
+
+    await waitFor(() => expect(mockImportDesign).toHaveBeenCalled())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('shows a Spanish error message for invalid_format', async () => {
-    openMock.mockResolvedValueOnce('/path/to/image.jpg')
     mockImportDesign.mockRejectedValueOnce('invalid_format')
-
     render(<DesignList />)
-    await userEvent.type(screen.getByLabelText(/ancho/i), '10')
-    await userEvent.type(screen.getByLabelText(/alto/i), '8')
+    await selectFile('/path/to/image.jpg')
+    await fillDims()
     await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
 
     await waitFor(() => {
@@ -240,12 +302,10 @@ describe('DesignList import UI', () => {
   })
 
   it('shows a Spanish error message for empty_artwork', async () => {
-    openMock.mockResolvedValueOnce('/path/to/blank.png')
     mockImportDesign.mockRejectedValueOnce('empty_artwork')
-
     render(<DesignList />)
-    await userEvent.type(screen.getByLabelText(/ancho/i), '10')
-    await userEvent.type(screen.getByLabelText(/alto/i), '8')
+    await selectFile('/path/to/blank.png')
+    await fillDims()
     await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
 
     await waitFor(() => {
@@ -255,29 +315,11 @@ describe('DesignList import UI', () => {
     })
   })
 
-  it('shows a Spanish error message for file_not_found', async () => {
-    openMock.mockResolvedValueOnce('/nonexistent/path.png')
-    mockImportDesign.mockRejectedValueOnce('file_not_found')
-
-    render(<DesignList />)
-    await userEvent.type(screen.getByLabelText(/ancho/i), '10')
-    await userEvent.type(screen.getByLabelText(/alto/i), '8')
-    await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'No se encontró el archivo seleccionado.'
-      )
-    })
-  })
-
   it('shows a Spanish error message for copy_failed', async () => {
-    openMock.mockResolvedValueOnce('/path/to/logo.png')
     mockImportDesign.mockRejectedValueOnce('copy_failed')
-
     render(<DesignList />)
-    await userEvent.type(screen.getByLabelText(/ancho/i), '10')
-    await userEvent.type(screen.getByLabelText(/alto/i), '8')
+    await selectFile('/path/to/logo.png')
+    await fillDims()
     await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
 
     await waitFor(() => {
@@ -285,19 +327,5 @@ describe('DesignList import UI', () => {
         'Error al guardar el diseño. Comprueba el espacio en disco.'
       )
     })
-  })
-
-  it('does not call importDesign when dialog is cancelled (returns null)', async () => {
-    openMock.mockResolvedValueOnce(null)
-
-    render(<DesignList />)
-    await userEvent.type(screen.getByLabelText(/ancho/i), '10')
-    await userEvent.type(screen.getByLabelText(/alto/i), '8')
-    await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
-
-    await waitFor(() => {
-      expect(openMock).toHaveBeenCalled()
-    })
-    expect(mockImportDesign).not.toHaveBeenCalled()
   })
 })
