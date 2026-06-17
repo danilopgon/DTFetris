@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesignInput, ImportDesignRequest, VisibleBounds } from '../types/domain'
-import { DEFAULT_SHEET_CONFIG } from '../types/domain'
+import { DEFAULT_SHEET_CONFIG, getFittedVisibleSizeCm, getRequestedCellPackingFootprintCm } from '../types/domain'
 import { useAppStore } from './useAppStore'
 
 vi.mock('../commands', () => ({
   importDesign: vi.fn(),
+  runPacking: vi.fn(),
 }))
 
-import { importDesign as importDesignCommand } from '../commands'
+import { importDesign as importDesignCommand, runPacking as runPackingCommand } from '../commands'
 
 const importDesignMock = vi.mocked(importDesignCommand)
+const runPackingMock = vi.mocked(runPackingCommand)
 
 const baseVisibleBounds: VisibleBounds = {
   xPx: 0,
@@ -64,6 +66,7 @@ describe('useAppStore importDesign action', () => {
   beforeEach(() => {
     useAppStore.setState(useAppStore.getInitialState(), true)
     importDesignMock.mockReset()
+    runPackingMock.mockReset()
   })
 
   it('appends exactly one design to an empty list on successful import', async () => {
@@ -118,5 +121,120 @@ describe('useAppStore importDesign action', () => {
 
     expect(useAppStore.getState().designs).toHaveLength(1)
     expect(useAppStore.getState().designs[0]).toEqual(first)
+  })
+})
+
+describe('useAppStore design editing actions', () => {
+  beforeEach(() => {
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    importDesignMock.mockReset()
+    runPackingMock.mockReset()
+  })
+
+  function seedDesignWithSheet(design = makeDesign()) {
+    useAppStore.setState({
+      designs: [design],
+      sheets: [
+        {
+          id: 'sheet-1',
+          widthCm: 55,
+          heightCm: 100,
+          placements: [{ designId: design.id, xCm: 0, yCm: 0, widthCm: 10, heightCm: 8, rotated: false }],
+        },
+      ],
+      isLayoutStale: false,
+    })
+  }
+
+  it('updates editable fields, clears sheets, marks layout stale, and does not run packing', () => {
+    seedDesignWithSheet()
+
+    const result = useAppStore.getState().updateDesign('design-1', {
+      name: 'Logo principal',
+      widthCm: 12,
+      heightCm: 9,
+      quantity: 3,
+      canRotate: true,
+    })
+
+    expect(result).toEqual({ ok: true })
+    expect(useAppStore.getState().designs[0]).toMatchObject({
+      name: 'Logo principal',
+      widthCm: 12,
+      heightCm: 9,
+      quantity: 3,
+      canRotate: true,
+      imagePath: '/app-data/design-assets/logo.png',
+    })
+    expect(useAppStore.getState().sheets).toEqual([])
+    expect(useAppStore.getState().isLayoutStale).toBe(true)
+    expect(runPackingMock).not.toHaveBeenCalled()
+  })
+
+  it('preserves edited requested cell dimensions as user intent while fitted size stays derived metadata', () => {
+    seedDesignWithSheet(makeDesign({ originalAspectRatio: 25 / 19 }))
+
+    const result = useAppStore.getState().updateDesign('design-1', {
+      widthCm: 10,
+      heightCm: 8,
+    })
+
+    const savedDesign = useAppStore.getState().designs[0]
+    const visibleSize = getFittedVisibleSizeCm(savedDesign, savedDesign.originalAspectRatio)
+
+    expect(result).toEqual({ ok: true })
+    expect(visibleSize).toEqual({ widthCm: 10, heightCm: 7.6 })
+    expect(getRequestedCellPackingFootprintCm(savedDesign)).toEqual({ widthCm: 10, heightCm: 8 })
+    expect(savedDesign).toMatchObject({ widthCm: 10, heightCm: 8 })
+    expect(runPackingMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid updates and leaves previous design and layout unchanged', () => {
+    seedDesignWithSheet()
+
+    const result = useAppStore.getState().updateDesign('design-1', { quantity: 0, widthCm: 10.5 })
+
+    expect(result).toEqual({
+      ok: false,
+      errors: [
+        { code: 'invalid_dimensions', field: 'widthCm', designId: 'design-1' },
+        { code: 'invalid_quantity', field: 'quantity', designId: 'design-1' },
+      ],
+    })
+    expect(useAppStore.getState().designs[0]).toEqual(makeDesign())
+    expect(useAppStore.getState().sheets).toHaveLength(1)
+    expect(useAppStore.getState().isLayoutStale).toBe(false)
+    expect(runPackingMock).not.toHaveBeenCalled()
+  })
+
+  it('duplicates a design with a new id and shared image path, then invalidates layout without packing', () => {
+    seedDesignWithSheet(makeDesign({ name: 'Logo principal', canRotate: true }))
+
+    const duplicate = useAppStore.getState().duplicateDesign('design-1')
+
+    expect(duplicate).toMatchObject({
+      name: 'Logo principal copia',
+      imagePath: '/app-data/design-assets/logo.png',
+      widthCm: 10,
+      heightCm: 8,
+      quantity: 1,
+      canRotate: true,
+    })
+    expect(duplicate?.id).not.toBe('design-1')
+    expect(useAppStore.getState().designs).toHaveLength(2)
+    expect(useAppStore.getState().sheets).toEqual([])
+    expect(useAppStore.getState().isLayoutStale).toBe(true)
+    expect(runPackingMock).not.toHaveBeenCalled()
+  })
+
+  it('removes a design and invalidates existing layout without packing', () => {
+    seedDesignWithSheet()
+
+    useAppStore.getState().removeDesign('design-1')
+
+    expect(useAppStore.getState().designs).toEqual([])
+    expect(useAppStore.getState().sheets).toEqual([])
+    expect(useAppStore.getState().isLayoutStale).toBe(true)
+    expect(runPackingMock).not.toHaveBeenCalled()
   })
 })

@@ -48,6 +48,8 @@ export type DesignInput = {
   visibleBounds: VisibleBounds
 }
 
+export type DesignUpdatePatch = Partial<Pick<DesignInput, 'name' | 'widthCm' | 'heightCm' | 'quantity' | 'canRotate'>>
+
 export type Placement = {
   designId: string
   xCm: Cm
@@ -86,7 +88,7 @@ export type PackingResult = {
   unplacedItems: UnplacedItem[]
 }
 
-export type DomainValidationErrorCode = UnplacedReasonCode | 'invalid_quantity'
+export type DomainValidationErrorCode = UnplacedReasonCode | 'invalid_quantity' | 'invalid_name'
 
 export type DomainValidationError = {
   code: DomainValidationErrorCode
@@ -99,7 +101,7 @@ export function isPositiveIntegerCm(value: number): value is Cm {
 }
 
 function isEditableQuantity(value: number): boolean {
-  return Number.isInteger(value) && value >= 0
+  return Number.isInteger(value) && value >= 1
 }
 
 export function validateEditableDesignInput(design: DesignInput): DomainValidationError[] {
@@ -117,7 +119,39 @@ export function validateEditableDesignInput(design: DesignInput): DomainValidati
     errors.push({ code: 'invalid_quantity', field: 'quantity', designId: design.id })
   }
 
+  if (design.name.trim().length === 0) {
+    errors.push({ code: 'invalid_name', field: 'name', designId: design.id })
+  }
+
   return errors
+}
+
+export function getFittedVisibleSizeCm(
+  requestedCell: Pick<DesignInput, 'widthCm' | 'heightCm'>,
+  artworkAspectRatio: number
+): Pick<DesignInput, 'widthCm' | 'heightCm'> {
+  const cellRatio = requestedCell.widthCm / requestedCell.heightCm
+
+  if (artworkAspectRatio > cellRatio) {
+    return {
+      widthCm: requestedCell.widthCm,
+      heightCm: requestedCell.widthCm / artworkAspectRatio,
+    }
+  }
+
+  return {
+    widthCm: requestedCell.heightCm * artworkAspectRatio,
+    heightCm: requestedCell.heightCm,
+  }
+}
+
+export function getRequestedCellPackingFootprintCm(
+  requestedCell: Pick<DesignInput, 'widthCm' | 'heightCm'>
+): Pick<DesignInput, 'widthCm' | 'heightCm'> {
+  return {
+    widthCm: requestedCell.widthCm,
+    heightCm: requestedCell.heightCm,
+  }
 }
 
 export function validatePackingRequest(request: PackingRequest): DomainValidationError[] {

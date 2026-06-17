@@ -12,21 +12,27 @@ MaxRects, implementado en Rust.
 
 - Evitar solapamientos.
 - Respetar límites de la plancha.
-- Usar las dimensiones del arte visible como rectángulo ocupado; el padding transparente del archivo no ocupa superficie de plancha.
+- Usar la celda solicitada del diseño como rectángulo ocupado en v0.1; el tamaño visible proporcional es derivado y no reemplaza ese footprint salvo que una especificación futura lo cambie.
 - Soportar rotación opcional por diseño.
 - Crear nuevas planchas automáticamente cuando se agota el espacio.
 - Priorizar el aprovechamiento de superficie.
 
 ### Transparencia
 
-El rectángulo que entra a MaxRects representa el área visible del diseño en centímetros. La caja completa del archivo PNG/SVG no debe usarse como superficie ocupada si incluye transparencia alrededor del arte.
+En v0.1, el rectángulo que entra a MaxRects representa la celda solicitada por el usuario en centímetros enteros. La caja completa del archivo PNG/SVG no debe usarse como fuente de proporción si incluye transparencia alrededor del arte.
 
 Los límites visibles se detectan al importar el diseño en `v0-1-design-import` y se persisten como metadatos. MaxRects consume esos límites persistidos; no vuelve a detectar el área visible desde los archivos durante el packing.
 
 Esto protege dos invariantes de negocio:
 
-- La plancha final no reserva material por píxeles transparentes que no se imprimen.
-- Las dimensiones pedidas por el cliente se aplican al arte visible, no al canvas del archivo.
+- La plancha final no deforma el arte por píxeles transparentes que no se imprimen.
+- Las dimensiones pedidas por el cliente se conservan como celda ocupada; el arte visible se ajusta proporcionalmente dentro de esa celda.
+
+Si una celda solicitada de 10 cm x 8 cm contiene arte visible con proporción 2:1, el footprint de packing sigue siendo 10 cm x 8 cm y el tamaño visible derivado es 10 cm x 5 cm.
+
+## Estado temporal de recálculo
+
+Hasta que el packing real reemplace el placeholder, editar, duplicar o eliminar diseños limpia las planchas existentes o marca el layout como pendiente. Estas mutaciones no deben llamar a `run_packing` ni crear placements falsos.
 
 ## Spike obligatorio antes de implementar MaxRects
 
@@ -61,7 +67,7 @@ pixels = centimeters * (dpi / 2.54)
 
 1. Rust recibe las planchas, los metadatos de límites visibles persistidos y `outputPath` desde Tauri command.
 2. Rust lee los archivos originales desde disco.
-3. Rust aplica el recorte o transformación de píxeles fuente indicada por los límites visibles guardados, ignorando padding transparente al escalar el arte visible a las dimensiones físicas configuradas.
+3. Rust aplica el recorte o transformación de píxeles fuente indicada por los límites visibles guardados, ignorando padding transparente y ajustando el arte visible proporcionalmente dentro de la celda solicitada.
 4. Inputs PNG se compositan con `image` usando el área visible guardada como base de escala.
 5. Inputs SVG se rasterizan con `resvg`; la exportación usa la misma regla de umbral alpha y los límites visibles guardados desde importación.
 6. `image` composita todos los bitmaps en la plancha final.

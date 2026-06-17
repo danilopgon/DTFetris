@@ -14,13 +14,21 @@ import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
 const openMock = vi.mocked(dialogOpen)
 
 const mockImportDesign = vi.fn()
+const mockUpdateDesign = vi.fn()
+const mockDuplicateDesign = vi.fn()
+const mockRemoveDesign = vi.fn()
 const mockDesigns: DesignInput[] = []
+let mockIsLayoutStale = false
 
 vi.mock('../../store/useAppStore', () => ({
   useAppStore: vi.fn((selector: (state: object) => unknown) =>
     selector({
       designs: mockDesigns,
+      isLayoutStale: mockIsLayoutStale,
       importDesign: mockImportDesign,
+      updateDesign: mockUpdateDesign,
+      duplicateDesign: mockDuplicateDesign,
+      removeDesign: mockRemoveDesign,
     })
   ),
 }))
@@ -98,8 +106,12 @@ describe('mapImportErrorToMessage (pure function)', () => {
 describe('DesignList import UI', () => {
   beforeEach(() => {
     mockImportDesign.mockReset()
+    mockUpdateDesign.mockReset()
+    mockDuplicateDesign.mockReset()
+    mockRemoveDesign.mockReset()
     openMock.mockReset()
     mockDesigns.length = 0
+    mockIsLayoutStale = false
     cleanup()
   })
 
@@ -327,5 +339,128 @@ describe('DesignList import UI', () => {
         'Error al guardar el diseño. Comprueba el espacio en disco.'
       )
     })
+  })
+})
+
+describe('DesignList editing UI', () => {
+  beforeEach(() => {
+    mockImportDesign.mockReset()
+    mockUpdateDesign.mockReset()
+    mockDuplicateDesign.mockReset()
+    mockRemoveDesign.mockReset()
+    openMock.mockReset()
+    mockDesigns.length = 0
+    mockIsLayoutStale = false
+    cleanup()
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  function renderWithDesign(overrides: Partial<DesignInput> = {}) {
+    mockDesigns.push({ ...sampleDesign, ...overrides })
+    render(<DesignList />)
+  }
+
+  it('edits name, requested cell dimensions, quantity, and rotation with Spanish controls', async () => {
+    mockUpdateDesign.mockReturnValueOnce({ ok: true })
+    renderWithDesign()
+
+    await userEvent.click(screen.getByRole('button', { name: /editar logo\.png/i }))
+    await userEvent.clear(screen.getByLabelText('Nombre'))
+    await userEvent.type(screen.getByLabelText('Nombre'), 'Logo principal')
+    await userEvent.clear(screen.getByLabelText('Ancho solicitado (cm)'))
+    await userEvent.type(screen.getByLabelText('Ancho solicitado (cm)'), '12')
+    await userEvent.clear(screen.getByLabelText('Alto solicitado (cm)'))
+    await userEvent.type(screen.getByLabelText('Alto solicitado (cm)'), '9')
+    await userEvent.clear(screen.getByLabelText('Cantidad'))
+    await userEvent.type(screen.getByLabelText('Cantidad'), '3')
+    await userEvent.click(screen.getByLabelText('Permitir rotación'))
+    expect(screen.getByText(/celda solicitada/i)).toHaveTextContent(
+      'La celda solicitada define el espacio ocupado; el arte se ajusta proporcionalmente sin deformarse.'
+    )
+    await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
+
+    expect(mockUpdateDesign).toHaveBeenCalledWith('imported-1', {
+      name: 'Logo principal',
+      widthCm: 12,
+      heightCm: 9,
+      quantity: 3,
+      canRotate: true,
+    })
+  })
+
+  it('shows Spanish validation feedback when quantity is less than one', async () => {
+    renderWithDesign()
+
+    await userEvent.click(screen.getByRole('button', { name: /editar logo\.png/i }))
+    await userEvent.clear(screen.getByLabelText('Cantidad'))
+    await userEvent.type(screen.getByLabelText('Cantidad'), '0')
+    await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('La cantidad debe ser al menos 1.')
+    expect(mockUpdateDesign).not.toHaveBeenCalled()
+  })
+
+  it('shows Spanish validation feedback when requested dimensions are fractional', async () => {
+    renderWithDesign()
+
+    await userEvent.click(screen.getByRole('button', { name: /editar logo\.png/i }))
+    await userEvent.clear(screen.getByLabelText('Ancho solicitado (cm)'))
+    await userEvent.type(screen.getByLabelText('Ancho solicitado (cm)'), '10.5')
+    await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'El ancho solicitado debe ser un número entero mayor que 0.'
+    )
+    expect(mockUpdateDesign).not.toHaveBeenCalled()
+  })
+
+  it('cancels an edit without calling store mutations', async () => {
+    renderWithDesign()
+
+    await userEvent.click(screen.getByRole('button', { name: /editar logo\.png/i }))
+    await userEvent.clear(screen.getByLabelText('Nombre'))
+    await userEvent.type(screen.getByLabelText('Nombre'), 'Temporal')
+    await userEvent.click(screen.getByRole('button', { name: /cancelar edición/i }))
+
+    expect(mockUpdateDesign).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Nombre')).not.toBeInTheDocument()
+  })
+
+  it('duplicates a design through the store without fabricating packing', async () => {
+    renderWithDesign()
+
+    await userEvent.click(screen.getByRole('button', { name: /duplicar logo\.png/i }))
+
+    expect(mockDuplicateDesign).toHaveBeenCalledWith('imported-1')
+    expect(mockUpdateDesign).not.toHaveBeenCalled()
+  })
+
+  it('requires confirmation before deleting and allows cancellation', async () => {
+    renderWithDesign()
+
+    await userEvent.click(screen.getByRole('button', { name: /eliminar logo\.png/i }))
+    expect(screen.getByText('¿Eliminar este diseño?')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /cancelar eliminación/i }))
+
+    expect(mockRemoveDesign).not.toHaveBeenCalled()
+  })
+
+  it('deletes only after confirmation through the store', async () => {
+    renderWithDesign()
+
+    await userEvent.click(screen.getByRole('button', { name: /eliminar logo\.png/i }))
+    await userEvent.click(screen.getByRole('button', { name: /confirmar eliminación/i }))
+
+    expect(mockRemoveDesign).toHaveBeenCalledWith('imported-1')
+  })
+
+  it('shows pending recalculation copy when the layout is stale', () => {
+    mockIsLayoutStale = true
+    renderWithDesign()
+
+    expect(screen.getByRole('status')).toHaveTextContent('El diseño cambió. Recalcula la plancha para actualizar el resultado.')
   })
 })

@@ -35,9 +35,9 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 | Orden | Estado | Cambio SDD sugerido | Versión | Objetivo | Requisitos principales | Verificación mínima |
 |---:|---|---|---|---|---|---|
 | 1 | ✅ Completada | `v0-1-project-shell` | v0.1 | Crear la base Tauri + Vite + React + TypeScript con estructura inicial. | Base técnica del roadmap. | `npm run build`, `cargo test` en `src-tauri` si aplica. |
-| 2 | 🚧 En curso | `v0-1-domain-model` | v0.1 | Definir modelos TS/Rust para plancha, diseño, unidades cm, cantidades y resultados de packing. | RF-002, RF-013. | Evidencia enfocada aprobada; falta nueva verificación/archive nativo tras corregir configuración de Vitest/ESLint. |
-| 3 | ⏳ Pendiente | `v0-1-design-import` | v0.1 | Cargar PNG/SVG, copiar archivos a `app_data_dir`, detectar límites visibles y guardar rutas en estado. | RF-001. | Tests de comando Tauri o capa adaptadora; archivo inválido y padding transparente. |
-| 4 | ⏳ Pendiente | `v0-1-basic-editing` | v0.1 | Permitir editar nombre, dimensiones, cantidad, rotación permitida y eliminar diseños. | RF-002, RF-004, RF-005, RF-012. | Tests de store/componentes para mutaciones y repacking disparado. |
+| 2 | ✅ Completada | `v0-1-domain-model` | v0.1 | Definir modelos TS/Rust para plancha, diseño, unidades cm, cantidades y resultados de packing. | RF-002, RF-013. | Archivada en `openspec/changes/archive/2026-06-16-v0-1-domain-model/`. |
+| 3 | ✅ Completada | `v0-1-design-import` | v0.1 | Cargar PNG/SVG, copiar archivos a `app_data_dir`, detectar límites visibles y guardar rutas en estado. | RF-001. | Archivada en `openspec/changes/archive/2026-06-16-v0-1-design-import/`. |
+| 4 | 🚧 En curso | `v0-1-basic-editing` | v0.1 | Permitir editar nombre, dimensiones solicitadas, cantidad, rotación permitida, duplicar y eliminar diseños. | RF-002, RF-003, RF-004, RF-005, RF-012. | Tests de store/componentes para mutaciones y layout pendiente sin packing placeholder. |
 | 5 | ⏳ Pendiente | `v0-1-single-sheet-packing` | v0.1 | Implementar packing básico MaxRects en Rust para una sola plancha usando el área visible como rectángulo ocupado. | RF-006, RF-013. | Unit tests Rust con casos simples, límites, piezas que no caben y transparencia. |
 | 6 | ⏳ Pendiente | `v0-1-basic-preview` | v0.1 | Mostrar una plancha con React Konva convirtiendo cm a px solo para visualización. | RF-008. | Tests de conversión y smoke test de renderizado. |
 | 7 | ⏳ Pendiente | `v0-2-multipage-packing` | v0.2 | Generar automáticamente múltiples planchas cuando la primera se llena. | RF-007, RF-006. | Unit tests Rust con overflow controlado y conteo esperado de planchas. |
@@ -69,7 +69,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** contratos claros para dimensiones físicas, diseños, planchas y resultados de layout.
 
-**Estado SDD:** implementación y tareas completas con evidencia enfocada, pero no se marca como completada porque el último `verify-report.md` nativo registra `FAIL`. Los bloqueos citados allí ya no coinciden con la configuración actual (`vitest.config.ts` excluye `tests/e2e/**` y existe `eslint.config.mjs`), por lo que el siguiente paso correcto es re-verificar y archivar, no sobreafirmar cierre desde el roadmap.
+**Estado SDD:** completada y archivada en `openspec/changes/archive/2026-06-16-v0-1-domain-model/`.
 
 **Incluye:** tipos compartidos equivalentes en TypeScript/Rust cuando aplique y helpers de conversión para preview/exportación.
 
@@ -81,6 +81,8 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** el usuario puede seleccionar PNG/SVG y la app conserva referencias persistibles por ruta.
 
+**Estado SDD:** completada y archivada en `openspec/changes/archive/2026-06-16-v0-1-design-import/`.
+
 **Incluye:** copia a `app_data_dir`, validación básica de formato/tamaño, detección de límites visibles y estado con rutas.
 
 **No incluye:** validación completa de aspect ratio; queda para `v0-2-aspect-ratio-validation`.
@@ -91,7 +93,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** el usuario puede mantener una lista básica de diseños y cambiar sus parámetros.
 
-**Incluye:** edición, eliminación, duplicado si se decide incluirlo como parte del CRUD inicial, y disparo de repacking.
+**Incluye:** edición, eliminación confirmada, duplicado, cantidad mínima `1` y layout pendiente de recálculo sin llamar al placeholder de packing.
 
 **No incluye:** métricas avanzadas ni validación de deformación.
 
