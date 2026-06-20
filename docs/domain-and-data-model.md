@@ -8,13 +8,14 @@ El dominio trabaja en centímetros. Las conversiones a píxeles son detalles de 
 |---|---|
 | Unidad fuente de verdad | Centímetros en todo el dominio. |
 | Dimensiones de plancha | Configurables por usuario, sin valores hardcodeados. |
-| Dimensiones físicas MVP | Solo centímetros enteros positivos; no se aceptan decimales, cero ni negativos para generación/packing. |
+| Dimensiones físicas MVP | Plancha y celdas solicitadas de diseño usan centímetros enteros positivos; no se aceptan decimales, cero ni negativos. |
 | Plancha inicial de la app | Trabajo nuevo inicia con 55 cm de ancho x 100 cm de alto; no es una invariante del dominio. |
-| Cantidad editable | Una cantidad de diseño puede ser `0` mientras se edita. |
-| Cantidad para generar | Generación/packing requiere al menos un diseño con `quantity > 0`. |
+| Cantidad editable | La cantidad de un diseño debe ser un entero `>= 1`; `0` no significa ocultar. |
+| Cantidad para generar | Generación/packing requiere diseños válidos y al menos un diseño con `quantity > 0`. |
 | Aspect ratio | Se calcula al cargar la imagen y queda como campo explícito e inmutable. |
-| Transparencia en diseños | Las dimensiones configuradas aplican al área visible del arte, no al canvas completo del archivo. |
+| Transparencia en diseños | Los límites visibles definen la proporción del arte; la celda solicitada define el espacio ocupado. |
 | Deformación | Nunca automática; requiere confirmación explícita. |
+| Ajuste proporcional | Si la celda solicitada y el arte visible tienen distinta proporción, el tamaño visible se deriva proporcionalmente dentro de la celda y no reemplaza las dimensiones solicitadas. |
 | Rutas de imagen | Se almacenan como rutas en disco dentro de `app_data_dir`, no como objetos `File`. |
 | Duplicado | Comparte la misma ruta de imagen que el original. |
 | Ítems no ubicados | El resultado de packing conserva ítems no ubicados de forma explícita para multipágina futura. |
@@ -57,7 +58,7 @@ Para exportación, `dpi = 300`.
 
 ## Transparencia y área visible
 
-La transparencia del archivo importado no cuenta como superficie ocupada de la plancha. El sistema debe considerar los límites del contenido visible del PNG/SVG como el área física del diseño.
+La transparencia del archivo importado no debe deformar el arte ni cambiar su proporción visible. El sistema considera los límites del contenido visible del PNG/SVG como metadatos para derivar proporción y recorte.
 
 El área visible se define operativamente así:
 
@@ -69,8 +70,9 @@ El área visible se define operativamente así:
 
 Ejemplo crítico:
 
-- Si el usuario configura un logo como 8 cm x 8 cm, el arte visible debe imprimirse a 8 cm x 8 cm.
-- Si el archivo fuente tiene un canvas de 8 cm x 8 cm pero el contenido opaco ocupa visualmente 4 cm x 4 cm por padding transparente, ese padding no debe provocar que el logo visible se imprima a 4 cm x 4 cm dentro de un espacio de 8 cm x 8 cm.
+- Si el usuario configura una celda de 8 cm x 8 cm, esa celda es el footprint solicitado.
+- Si el arte visible no es cuadrado, se ajusta proporcionalmente dentro de esa celda sin estirarse; el tamaño visible derivado puede ocupar menos ancho o alto.
+- Si el archivo fuente tiene padding transparente, ese padding no cambia la proporción del arte visible ni aumenta el tamaño visible derivado.
 
 Los límites visibles se detectan durante `v0-1-design-import` y se persisten como metadatos del diseño. Preview, packing y exportación consumen esos metadatos; no deben depender de padding transparente oculto en el archivo fuente.
 
@@ -113,8 +115,8 @@ type DesignInput = {
   id: string
   name: string
   imagePath: string      // ruta en app_data_dir/design-assets/{uuid}.{ext}
-  widthCm: Cm            // centímetros confirmados por el usuario
-  heightCm: Cm           // centímetros confirmados por el usuario
+  widthCm: Cm            // celda solicitada por el usuario en cm enteros
+  heightCm: Cm           // celda solicitada por el usuario en cm enteros
   originalAspectRatio: number  // visibleWidthPx / visibleHeightPx del arte
   quantity: number
   canRotate: boolean
@@ -165,13 +167,14 @@ Los códigos técnicos como `does_not_fit` o `invalid_format` son valores establ
 
 `DesignInput.imagePath` siempre apunta a una copia dentro de `app_data_dir/design-assets/`. La ruta original del usuario no se persiste. Importar el mismo archivo dos veces produce dos copias con UUIDs distintos.
 
-`DesignInput.widthCm` y `DesignInput.heightCm` son las dimensiones físicas confirmadas por el usuario. No derivan del `viewBox` SVG ni de las dimensiones en píxeles del archivo fuente. `VisibleBounds` se usa exclusivamente para metadatos de calidad de fuente, no como dimensiones físicas.
+`DesignInput.widthCm` y `DesignInput.heightCm` son la celda solicitada por el usuario y el footprint ocupado en v0.1. No derivan del `viewBox` SVG ni de las dimensiones en píxeles del archivo fuente. `VisibleBounds` y `originalAspectRatio` permiten derivar el tamaño visible proporcional cuando preview, packing o exportación lo necesiten, pero ese valor derivado no se persiste sobre la intención del usuario.
 
 ### Validación TypeScript
 
 - `isPositiveIntegerCm` acepta solo centímetros enteros positivos.
-- `validateEditableDesignInput` permite `quantity: 0` durante edición si el resto del diseño es válido.
+- `validateEditableDesignInput` exige nombre no vacío, dimensiones enteras positivas y `quantity >= 1`.
 - `validatePackingRequest` exige una plancha válida y al menos un diseño con `quantity > 0` antes de invocar packing.
+- `getFittedVisibleSizeCm` deriva el tamaño visible proporcional dentro de la celda solicitada sin modificar `DesignInput.widthCm` ni `DesignInput.heightCm`.
 
 ## Modelo Rust
 

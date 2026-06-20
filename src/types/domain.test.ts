@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SHEET_CONFIG,
+  getFittedVisibleSizeCm,
+  getRequestedCellPackingFootprintCm,
   isPositiveIntegerCm,
   validateEditableDesignInput,
   validatePackingRequest,
@@ -52,10 +54,10 @@ describe('centimeter domain validation', () => {
 })
 
 describe('editable design validation', () => {
-  it('allows quantity 0 while editing when dimensions are valid', () => {
+  it('rejects quantity 0 while editing because hiding must be explicit later', () => {
     const errors = validateEditableDesignInput({ ...baseDesign, quantity: 0 })
 
-    expect(errors).toEqual([])
+    expect(errors).toEqual([{ code: 'invalid_quantity', field: 'quantity', designId: 'design-1' }])
   })
 
   it('reports invalid dimensions with stable technical codes', () => {
@@ -67,10 +69,49 @@ describe('editable design validation', () => {
     ])
   })
 
-  it('reports invalid editable quantities below zero', () => {
+  it('reports invalid editable quantities below one', () => {
     const errors = validateEditableDesignInput({ ...baseDesign, quantity: -1 })
 
     expect(errors).toEqual([{ code: 'invalid_quantity', field: 'quantity', designId: 'design-1' }])
+  })
+
+  it('reports an empty edited name without changing dimension validation', () => {
+    const errors = validateEditableDesignInput({ ...baseDesign, name: '   ' })
+
+    expect(errors).toEqual([{ code: 'invalid_name', field: 'name', designId: 'design-1' }])
+  })
+})
+
+describe('fitted visible artwork size', () => {
+  it('derives visible size proportionally inside a wider requested cell', () => {
+    const fitted = getFittedVisibleSizeCm({ widthCm: 10, heightCm: 8 }, 1)
+
+    expect(fitted).toEqual({ widthCm: 8, heightCm: 8 })
+  })
+
+  it('derives visible size proportionally inside a taller requested cell without replacing the cell', () => {
+    const fitted = getFittedVisibleSizeCm({ widthCm: 10, heightCm: 8 }, 2)
+
+    expect(fitted).toEqual({ widthCm: 10, heightCm: 5 })
+  })
+
+  it('allows the derived visible size to be fractional while the requested cell stays integer', () => {
+    const requestedCell = { widthCm: 10, heightCm: 8 }
+
+    const fitted = getFittedVisibleSizeCm(requestedCell, 25 / 19)
+
+    expect(fitted).toEqual({ widthCm: 10, heightCm: 7.6 })
+    expect(requestedCell).toEqual({ widthCm: 10, heightCm: 8 })
+  })
+})
+
+describe('requested cell packing footprint', () => {
+  it('uses requested cell dimensions as the occupied footprint even when visible artwork is smaller', () => {
+    const design = { ...baseDesign, widthCm: 10, heightCm: 8, originalAspectRatio: 25 / 19 }
+    const visibleSize = getFittedVisibleSizeCm(design, design.originalAspectRatio)
+
+    expect(visibleSize).toEqual({ widthCm: 10, heightCm: 7.6 })
+    expect(getRequestedCellPackingFootprintCm(design)).toEqual({ widthCm: 10, heightCm: 8 })
   })
 })
 
@@ -90,7 +131,10 @@ describe('packing request validation', () => {
       designs: [{ ...baseDesign, quantity: 0 }],
     }
 
-    expect(validatePackingRequest(request)).toEqual([{ code: 'invalid_quantity', field: 'designs' }])
+    expect(validatePackingRequest(request)).toEqual([
+      { code: 'invalid_quantity', field: 'quantity', designId: 'design-1' },
+      { code: 'invalid_quantity', field: 'designs' },
+    ])
   })
 
   it('rejects generation when there are no designs', () => {

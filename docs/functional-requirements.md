@@ -6,7 +6,7 @@ Estos requisitos describen el comportamiento visible del MVP. Las reglas técnic
 
 El usuario importará un único archivo PNG o SVG por operación. Cada importación exitosa agrega un diseño a la lista existente sin reemplazar los anteriores (acumulativo).
 
-Antes de confirmar la importación, el usuario debe introducir el ancho y alto en centímetros del arte visible. El sistema no infiere dimensiones físicas a partir del `viewBox` ni de los metadatos del archivo.
+Antes de confirmar la importación, el usuario debe introducir el ancho y alto solicitados en centímetros enteros para la celda del diseño. El sistema no infiere dimensiones físicas a partir del `viewBox` ni de los metadatos del archivo.
 
 El archivo se copia al directorio de datos de la aplicación (`app_data_dir/design-assets/{uuid}.{ext}`) mediante el comando `import_design` en Rust. La referencia almacenada en el estado será la ruta copiada en disco, no el objeto `File` del navegador ni la ruta original del usuario.
 
@@ -19,22 +19,24 @@ Si el archivo está ausente, tiene formato no soportado, es malformado, o el ár
 Cada diseño permitirá configurar:
 
 - Nombre.
-- Ancho en cm.
-- Alto en cm.
-- Cantidad.
+- Ancho solicitado en cm enteros.
+- Alto solicitado en cm enteros.
+- Cantidad mínima `1`.
 - Rotación permitida.
 
-Las dimensiones configuradas representan el tamaño físico del arte visible. Si el archivo contiene padding transparente, ese padding no reduce el tamaño final del arte ni reserva superficie adicional.
+Las dimensiones configuradas representan la celda solicitada por el usuario. Si la relación de esa celda no coincide con la relación del arte visible, el arte se ajusta proporcionalmente dentro de la celda sin deformarse; las dimensiones solicitadas no se reemplazan por el tamaño visible derivado.
 
 ## RF-003 - Duplicado de diseño
 
 El usuario podrá duplicar un diseño existente sin volver a cargar el archivo.
 
-La copia heredara:
+La copia hereda:
 
 - Ruta de imagen en disco, como referencia compartida y sin copiar el archivo.
-- Dimensiones.
-- Configuración.
+- Dimensiones solicitadas.
+- Cantidad, rotación permitida y metadatos del arte.
+
+La copia recibe un identificador nuevo y un nombre distinguible.
 
 Al compartir la referencia de ruta, la persistencia del diseño duplicado es coherente con la del original. No existe el problema de referencias a `File` volátiles.
 
@@ -47,9 +49,11 @@ El usuario podrá modificar en cualquier momento:
 - Cantidad.
 - Rotación permitida.
 
+La edición rechaza dimensiones fraccionarias, cero o negativas. La cantidad `0` no se usa para ocultar diseños; una futura exclusión deberá ser un control explícito.
+
 ## RF-005 - Eliminación
 
-El usuario podrá eliminar diseños de la lista.
+El usuario podrá eliminar diseños de la lista solo después de confirmar la acción. Cancelar la confirmación no modifica la lista.
 
 ## RF-006 - Packing automático
 
@@ -90,7 +94,7 @@ No se utiliza `localStorage` ni `IndexedDB`. La persistencia es responsabilidad 
 
 ## RF-012 - Repacking automático
 
-Cualquier modificación en diseños o configuración de plancha recalculará automáticamente todas las planchas.
+Hasta que exista packing real, cualquier edición, duplicado o eliminación de diseño invalida las planchas existentes: el frontend limpia el layout actual o lo marca como pendiente de recálculo. Esta etapa no invoca el placeholder `run_packing` ni fabrica posiciones.
 
 ## RF-013 - Configuración de plancha
 

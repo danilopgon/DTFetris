@@ -54,13 +54,14 @@ mod tests {
 Cobertura mínima:
 
 - Contratos de dominio: centímetros enteros positivos, rechazo de decimales/cero/negativos y códigos técnicos estables.
-- Validación editable vs generación: `quantity: 0` es válido en edición, pero packing requiere al menos un diseño con `quantity > 0`.
+- Validación editable vs generación: `quantity: 0` se rechaza en edición; ocultar/excluir deberá ser un control explícito futuro.
+- Ajuste proporcional: `getFittedVisibleSizeCm` conserva la celda solicitada y deriva un tamaño visible interno sin deformar.
 - Estado Zustand: plancha inicial de 55 cm x 100 cm y sincronización de configuración personalizada.
 - Conversion cm a px para distintos DPI.
 - Cálculo de aspect ratio original.
 - Detección de límites visibles en diseños con transparencia.
 - Detección de deformación por diferencia entre aspect ratio original y configurado.
-- Lógica de estado Zustand: añadir, editar, eliminar y duplicar diseños.
+- Lógica de estado Zustand: añadir, editar, eliminar y duplicar diseños; mutaciones válidas limpian planchas, marcan layout pendiente y no invocan `run_packing` placeholder.
 - Generación de IDs únicos.
 
 ## Tests de integración Tauri commands
@@ -92,13 +93,13 @@ mod integration {
 
 Cobertura mínima:
 
-- Formulario de diseño: validaciones, edición y feedback de deformación.
-- Lista de diseños: renderizado, duplicado y eliminación.
+- Formulario de diseño: validaciones en español, edición de celda solicitada, cantidad mínima `1` y rotación.
+- Lista de diseños: renderizado, duplicado, confirmación/cancelación de eliminación y estado de recálculo pendiente.
 - Panel de métricas: valores por plancha y globales.
 - Preview de planchas: renderizado correcto del número de hojas.
 - Flujo de importación (`DesignList`): botón visible, inputs de cm positivos, estado de carga durante import, mapeo de códigos de error a mensajes en español, cancelación de diálogo sin efecto.
 
-El archivo de test es `src/components/DesignList/DesignList.test.tsx`. Usa React Testing Library con `@testing-library/user-event`. Los mocks cubren `@tauri-apps/plugin-dialog` (función `open`) y `../../store/useAppStore` (selector-aware mock con `importDesign` como `vi.fn()`). La función `mapImportErrorToMessage` se extrae como función pura y se testea sin mocks.
+El archivo de test es `src/components/DesignList/DesignList.test.tsx`. Usa React Testing Library con `@testing-library/user-event`. Los mocks cubren `@tauri-apps/plugin-dialog` (función `open`) y `../../store/useAppStore` (selector-aware mock con `importDesign`, `updateDesign`, `duplicateDesign` y `removeDesign` como `vi.fn()`). La función `mapImportErrorToMessage` se extrae como función pura y se testea sin mocks.
 
 ## E2E + visual regression
 

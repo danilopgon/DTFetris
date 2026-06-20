@@ -5,7 +5,7 @@ Estos flujos muestran cómo viajan los datos entre usuario, frontend y backend R
 ## Importar diseño
 
 ```text
-Usuario introduce ancho y alto en cm en el panel lateral
+Usuario introduce ancho y alto solicitados en cm enteros en el panel lateral
   -> Usuario pulsa "Importar diseño"
   -> Se abre el selector de archivo (filtro: PNG y SVG únicamente)
   -> Si el usuario cancela: flujo termina, no hay cambios
@@ -31,6 +31,29 @@ Usuario configura diseños y pulsa "Generar"
   -> invoke('run_packing', { designs, sheetWidth, sheetHeight })
   -> Rust ejecuta MaxRects en centímetros sobre el área visible del diseño
   -> Rust devuelve Vec<Sheet> con placements
+```
+
+## Editar, duplicar y eliminar diseños
+
+```text
+Usuario pulsa "Editar" en un diseño
+  -> Frontend muestra campos en español para nombre, ancho solicitado, alto solicitado, cantidad y rotación
+  -> Si nombre está vacío, dimensiones no son enteros positivos o cantidad es menor que 1:
+       -> Se muestra validación en español y el diseño previo queda intacto
+  -> Si la edición es válida:
+       -> store.updateDesign actualiza el diseño
+       -> Se limpian las planchas existentes y queda pendiente recalcular
+
+Usuario pulsa "Duplicar"
+  -> store.duplicateDesign crea un diseño con id nuevo
+  -> La copia comparte imagePath y conserva dimensiones solicitadas, cantidad, rotación y metadatos
+  -> Se limpian las planchas existentes y queda pendiente recalcular
+
+Usuario pulsa "Eliminar"
+  -> Frontend solicita confirmación
+  -> Si cancela: no cambia la lista
+  -> Si confirma: store.removeDesign quita el diseño
+  -> Se limpian las planchas existentes y queda pendiente recalcular
 ```
 
 ## Previsualizar resultado
@@ -75,7 +98,7 @@ Usuario abre un trabajo guardado
 
 ## Cambios que disparan repacking
 
-El sistema recalcula automáticamente todas las planchas cuando cambia cualquiera de estos valores:
+Mientras `run_packing` siga siendo placeholder, el sistema no fabrica posiciones ni invoca packing desde las mutaciones. En su lugar marca el layout como pendiente de recálculo cuando cambia cualquiera de estos valores:
 
 - Ancho o alto de un diseño.
 - Cantidad.

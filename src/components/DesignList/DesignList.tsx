@@ -1,12 +1,24 @@
 import { open } from '@tauri-apps/plugin-dialog'
 import { useState } from 'react'
 import { useAppStore } from '../../store/useAppStore'
-import type { ImportDesignErrorCode } from '../../types/domain'
+import type { DesignInput, DesignUpdatePatch, DomainValidationError, ImportDesignErrorCode } from '../../types/domain'
 import { mapImportErrorToMessage } from '../../utils/importErrors'
+
+type EditForm = {
+  name: string
+  widthCm: string
+  heightCm: string
+  quantity: string
+  canRotate: boolean
+}
 
 export default function DesignList() {
   const designs = useAppStore((state) => state.designs)
+  const isLayoutStale = useAppStore((state) => state.isLayoutStale)
   const importDesign = useAppStore((state) => state.importDesign)
+  const updateDesign = useAppStore((state) => state.updateDesign)
+  const duplicateDesign = useAppStore((state) => state.duplicateDesign)
+  const removeDesign = useAppStore((state) => state.removeDesign)
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [selectedName, setSelectedName] = useState<string | null>(null)
@@ -14,6 +26,10 @@ export default function DesignList() {
   const [heightCm, setHeightCm] = useState<string>('')
   const [isImporting, setIsImporting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<EditForm | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   const parsedWidth = parseFloat(widthCm)
   const parsedHeight = parseFloat(heightCm)
@@ -62,9 +78,67 @@ export default function DesignList() {
     }
   }
 
+  function startEdit(design: DesignInput) {
+    setEditingId(design.id)
+    setEditForm({
+      name: design.name,
+      widthCm: String(design.widthCm),
+      heightCm: String(design.heightCm),
+      quantity: String(design.quantity),
+      canRotate: design.canRotate,
+    })
+    setEditError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditForm(null)
+    setEditError(null)
+  }
+
+  function updateEditForm(patch: Partial<EditForm>) {
+    setEditForm((current) => (current ? { ...current, ...patch } : current))
+  }
+
+  function saveEdit(id: string) {
+    if (!editForm) return
+
+    const patch: DesignUpdatePatch = {
+      name: editForm.name.trim(),
+      widthCm: Number(editForm.widthCm),
+      heightCm: Number(editForm.heightCm),
+      quantity: Number(editForm.quantity),
+      canRotate: editForm.canRotate,
+    }
+    const localError = validateEditPatch(patch)
+    if (localError) {
+      setEditError(localError)
+      return
+    }
+
+    const result = updateDesign(id, patch)
+    if (!result.ok) {
+      setEditError(mapDomainErrorToSpanish(result.errors[0]))
+      return
+    }
+
+    cancelEdit()
+  }
+
+  function confirmDelete(id: string) {
+    removeDesign(id)
+    setPendingDeleteId(null)
+  }
+
   return (
     <div>
       <h2 className="mb-4 text-lg font-semibold">Diseños</h2>
+
+      {isLayoutStale && (
+        <p role="status" className="mb-3 rounded border border-amber-500/60 bg-amber-950/40 px-3 py-2 text-sm text-amber-100">
+          El diseño cambió. Recalcula la plancha para actualizar el resultado.
+        </p>
+      )}
 
       <div className="mb-4 space-y-2">
         <button
@@ -137,11 +211,146 @@ export default function DesignList() {
         <ul className="space-y-2">
           {designs.map((d) => (
             <li key={d.id} className="rounded bg-gray-800 p-2 text-sm">
-              {d.name} ({d.widthCm} × {d.heightCm} cm) ×{d.quantity}
+              {editingId === d.id && editForm ? (
+                <div className="space-y-2">
+                  <div>
+                    <label htmlFor={`design-name-${d.id}`} className="mb-1 block text-sm">
+                      Nombre
+                    </label>
+                    <input
+                      id={`design-name-${d.id}`}
+                      value={editForm.name}
+                      onChange={(e) => updateEditForm({ name: e.target.value })}
+                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`design-edit-width-${d.id}`} className="mb-1 block text-sm">
+                      Ancho solicitado (cm)
+                    </label>
+                    <input
+                      id={`design-edit-width-${d.id}`}
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={editForm.widthCm}
+                      onChange={(e) => updateEditForm({ widthCm: e.target.value })}
+                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`design-edit-height-${d.id}`} className="mb-1 block text-sm">
+                      Alto solicitado (cm)
+                    </label>
+                    <input
+                      id={`design-edit-height-${d.id}`}
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={editForm.heightCm}
+                      onChange={(e) => updateEditForm({ heightCm: e.target.value })}
+                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`design-edit-quantity-${d.id}`} className="mb-1 block text-sm">
+                      Cantidad
+                    </label>
+                    <input
+                      id={`design-edit-quantity-${d.id}`}
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={editForm.quantity}
+                      onChange={(e) => updateEditForm({ quantity: e.target.value })}
+                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editForm.canRotate}
+                      onChange={(e) => updateEditForm({ canRotate: e.target.checked })}
+                    />
+                    Permitir rotación
+                  </label>
+                  <p className="text-xs text-gray-400">
+                    La celda solicitada define el espacio ocupado; el arte se ajusta proporcionalmente sin deformarse.
+                  </p>
+                  {editError && (
+                    <p role="alert" className="text-sm text-red-400">
+                      {editError}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => saveEdit(d.id)} aria-label="Guardar cambios" className="rounded bg-blue-600 px-2 py-1 text-white">
+                      Guardar
+                    </button>
+                    <button type="button" onClick={cancelEdit} aria-label="Cancelar edición" className="rounded border border-gray-500 px-2 py-1">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div>
+                    {d.name} ({d.widthCm} × {d.heightCm} cm) ×{d.quantity}
+                  </div>
+                  {pendingDeleteId === d.id ? (
+                    <div className="space-y-2 rounded border border-red-500/50 p-2">
+                      <p>¿Eliminar este diseño?</p>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => confirmDelete(d.id)} aria-label="Confirmar eliminación" className="rounded bg-red-600 px-2 py-1 text-white">
+                          Eliminar
+                        </button>
+                        <button type="button" onClick={() => setPendingDeleteId(null)} aria-label="Cancelar eliminación" className="rounded border border-gray-500 px-2 py-1">
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => startEdit(d)} aria-label={`Editar ${d.name}`} className="rounded border border-gray-500 px-2 py-1">
+                        Editar
+                      </button>
+                      <button type="button" onClick={() => duplicateDesign(d.id)} aria-label={`Duplicar ${d.name}`} className="rounded border border-gray-500 px-2 py-1">
+                        Duplicar
+                      </button>
+                      <button type="button" onClick={() => setPendingDeleteId(d.id)} aria-label={`Eliminar ${d.name}`} className="rounded border border-red-500 px-2 py-1 text-red-300">
+                        Eliminar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </li>
           ))}
         </ul>
       )}
     </div>
   )
+}
+
+function validateEditPatch(patch: DesignUpdatePatch): string | null {
+  if (typeof patch.name !== 'string' || patch.name.trim().length === 0) {
+    return 'El nombre es obligatorio.'
+  }
+  if (!Number.isInteger(patch.widthCm) || Number(patch.widthCm) < 1) {
+    return 'El ancho solicitado debe ser un número entero mayor que 0.'
+  }
+  if (!Number.isInteger(patch.heightCm) || Number(patch.heightCm) < 1) {
+    return 'El alto solicitado debe ser un número entero mayor que 0.'
+  }
+  if (!Number.isInteger(patch.quantity) || Number(patch.quantity) < 1) {
+    return 'La cantidad debe ser al menos 1.'
+  }
+  return null
+}
+
+function mapDomainErrorToSpanish(error: DomainValidationError | undefined): string {
+  if (error?.field === 'quantity') return 'La cantidad debe ser al menos 1.'
+  if (error?.field === 'name') return 'El nombre es obligatorio.'
+  if (error?.field === 'widthCm') return 'El ancho solicitado debe ser un número entero mayor que 0.'
+  if (error?.field === 'heightCm') return 'El alto solicitado debe ser un número entero mayor que 0.'
+  return 'No se pudieron guardar los cambios del diseño.'
 }

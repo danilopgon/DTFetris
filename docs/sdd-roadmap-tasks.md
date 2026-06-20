@@ -35,23 +35,24 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 | Orden | Estado | Cambio SDD sugerido | Versión | Objetivo | Requisitos principales | Verificación mínima |
 |---:|---|---|---|---|---|---|
 | 1 | ✅ Completada | `v0-1-project-shell` | v0.1 | Crear la base Tauri + Vite + React + TypeScript con estructura inicial. | Base técnica del roadmap. | `npm run build`, `cargo test` en `src-tauri` si aplica. |
-| 2 | 🚧 En curso | `v0-1-domain-model` | v0.1 | Definir modelos TS/Rust para plancha, diseño, unidades cm, cantidades y resultados de packing. | RF-002, RF-013. | Evidencia enfocada aprobada; falta nueva verificación/archive nativo tras corregir configuración de Vitest/ESLint. |
-| 3 | ⏳ Pendiente | `v0-1-design-import` | v0.1 | Cargar PNG/SVG, copiar archivos a `app_data_dir`, detectar límites visibles y guardar rutas en estado. | RF-001. | Tests de comando Tauri o capa adaptadora; archivo inválido y padding transparente. |
-| 4 | ⏳ Pendiente | `v0-1-basic-editing` | v0.1 | Permitir editar nombre, dimensiones, cantidad, rotación permitida y eliminar diseños. | RF-002, RF-004, RF-005, RF-012. | Tests de store/componentes para mutaciones y repacking disparado. |
-| 5 | ⏳ Pendiente | `v0-1-single-sheet-packing` | v0.1 | Implementar packing básico MaxRects en Rust para una sola plancha usando el área visible como rectángulo ocupado. | RF-006, RF-013. | Unit tests Rust con casos simples, límites, piezas que no caben y transparencia. |
-| 6 | ⏳ Pendiente | `v0-1-basic-preview` | v0.1 | Mostrar una plancha con React Konva convirtiendo cm a px solo para visualización. | RF-008. | Tests de conversión y smoke test de renderizado. |
-| 7 | ⏳ Pendiente | `v0-2-multipage-packing` | v0.2 | Generar automáticamente múltiples planchas cuando la primera se llena. | RF-007, RF-006. | Unit tests Rust con overflow controlado y conteo esperado de planchas. |
-| 8 | ⏳ Pendiente | `v0-2-rotation-support` | v0.2 | Soportar rotación opcional en packing respetando la configuración por diseño. | RF-002, RF-004, RF-006. | Tests con diseños que solo caben rotados y diseños con rotación bloqueada. |
-| 9 | ⏳ Pendiente | `v0-2-sheet-metrics` | v0.2 | Calcular y mostrar métricas por plancha y globales. | RF-009. | Tests de área usada/libre y porcentaje de ocupación. |
-| 10 | ⏳ Pendiente | `v0-2-aspect-ratio-validation` | v0.2 | Detectar proporción original PNG/SVG desde límites visibles y advertir deformaciones. | RF-014. | Tests para PNG, SVG rasterizado con límites visibles y confirmación explícita de deformación. |
-| 11 | ⏳ Pendiente | `v0-2-tauri-integration-tests` | v0.2 | Cubrir comandos Tauri principales con tests de integración. | RF-001, RF-006, RF-012. | Tests de carga, packing y errores de commands. |
-| 12 | ⏳ Pendiente | `v0-2-react-component-tests` | v0.2 | Agregar cobertura básica de componentes críticos con React Testing Library. | RF-002, RF-004, RF-008, RF-009. | Tests de edición, listado, métricas y estados vacíos. |
-| 13 | ⏳ Pendiente | `v0-3-png-export` | v0.3 | Exportar planchas PNG a 300 DPI desde Rust con `image`, escalando el arte visible a las dimensiones configuradas. | RF-010. | Tests Rust de dimensiones exportadas, DPI esperado, composición básica y padding transparente. |
-| 14 | ⏳ Pendiente | `v0-3-export-e2e` | v0.3 | Validar el flujo completo de exportación con Playwright + WebDriver. | RF-010. | E2E que carga diseño, genera plancha y verifica archivo exportado. |
-| 15 | ⏳ Pendiente | `v0-4-local-persistence` | v0.4 | Guardar y cargar trabajos localmente como JSON con rutas a imágenes. | RF-011. | Tests de serialización, lectura/escritura y rutas inexistentes. |
-| 16 | ⏳ Pendiente | `v0-4-save-load-e2e` | v0.4 | Validar guardado y recuperación desde la UI. | RF-011. | E2E que guarda, reinicia/recarga y recupera el trabajo. |
-| 17 | ⏳ Pendiente | `v1-0-visual-regression` | v1.0 | Estabilizar snapshots visuales de preview y exportación. | RF-008, RF-010. | Snapshots Playwright deliberados y documentados. |
-| 18 | ⏳ Pendiente | `v1-0-production-hardening` | v1.0 | Completar cobertura, errores, límites y preparación para uso productivo local. | Todo el MVP. | `npm run test`, `npm run test:e2e`, `npm run build`, `cargo test`. |
+| 2 | ✅ Completada | `v0-1-domain-model` | v0.1 | Definir modelos TS/Rust para plancha, diseño, unidades cm, cantidades y resultados de packing. | RF-002, RF-013. | Archivada en `openspec/changes/archive/2026-06-16-v0-1-domain-model/`. |
+| 3 | ✅ Completada | `v0-1-design-import` | v0.1 | Cargar PNG/SVG, copiar archivos a `app_data_dir`, detectar límites visibles y guardar rutas en estado. | RF-001. | Archivada en `openspec/changes/archive/2026-06-16-v0-1-design-import/`. |
+| 4 | ✅ Completada | `v0-1-basic-editing` | v0.1 | Permitir editar nombre, dimensiones solicitadas, cantidad, rotación permitida, duplicar y eliminar diseños. | RF-002, RF-003, RF-004, RF-005, RF-012. | Tests de store/componentes para mutaciones y layout pendiente sin packing placeholder. |
+| 5 | ⏳ Pendiente | `v0-1-domain-composition-debt` | v0.1 | Atajar deuda técnica detectada en revisión de `v0-1-basic-editing`: bug de estado, duplicación de validación y deficiencias de arquitectura en dominio y componente. | Deuda interna, sin RF directo. | Tests existentes siguen pasando; `validateEditPatch` eliminado de vista; `isLayoutStale` se limpia al recibir sheets nuevos; `domain.ts` separado en módulos; `DesignList` descompuesto. |
+| 6 | ⏳ Pendiente | `v0-1-single-sheet-packing` | v0.1 | Implementar packing básico MaxRects en Rust para una sola plancha usando el área visible como rectángulo ocupado. | RF-006, RF-013. | Unit tests Rust con casos simples, límites, piezas que no caben y transparencia. |
+| 7 | ⏳ Pendiente | `v0-1-basic-preview` | v0.1 | Mostrar una plancha con React Konva convirtiendo cm a px solo para visualización. | RF-008. | Tests de conversión y smoke test de renderizado. |
+| 8 | ⏳ Pendiente | `v0-2-multipage-packing` | v0.2 | Generar automáticamente múltiples planchas cuando la primera se llena. | RF-007, RF-006. | Unit tests Rust con overflow controlado y conteo esperado de planchas. |
+| 9 | ⏳ Pendiente | `v0-2-rotation-support` | v0.2 | Soportar rotación opcional en packing respetando la configuración por diseño. | RF-002, RF-004, RF-006. | Tests con diseños que solo caben rotados y diseños con rotación bloqueada. |
+| 10 | ⏳ Pendiente | `v0-2-sheet-metrics` | v0.2 | Calcular y mostrar métricas por plancha y globales. | RF-009. | Tests de área usada/libre y porcentaje de ocupación. |
+| 11 | ⏳ Pendiente | `v0-2-aspect-ratio-validation` | v0.2 | Detectar proporción original PNG/SVG desde límites visibles y advertir deformaciones. | RF-014. | Tests para PNG, SVG rasterizado con límites visibles y confirmación explícita de deformación. |
+| 12 | ⏳ Pendiente | `v0-2-tauri-integration-tests` | v0.2 | Cubrir comandos Tauri principales con tests de integración. | RF-001, RF-006, RF-012. | Tests de carga, packing y errores de commands. |
+| 13 | ⏳ Pendiente | `v0-2-react-component-tests` | v0.2 | Agregar cobertura básica de componentes críticos con React Testing Library. | RF-002, RF-004, RF-008, RF-009. | Tests de edición, listado, métricas y estados vacíos. |
+| 14 | ⏳ Pendiente | `v0-3-png-export` | v0.3 | Exportar planchas PNG a 300 DPI desde Rust con `image`, escalando el arte visible a las dimensiones configuradas. | RF-010. | Tests Rust de dimensiones exportadas, DPI esperado, composición básica y padding transparente. |
+| 15 | ⏳ Pendiente | `v0-3-export-e2e` | v0.3 | Validar el flujo completo de exportación con Playwright + WebDriver. | RF-010. | E2E que carga diseño, genera plancha y verifica archivo exportado. |
+| 16 | ⏳ Pendiente | `v0-4-local-persistence` | v0.4 | Guardar y cargar trabajos localmente como JSON con rutas a imágenes. | RF-011. | Tests de serialización, lectura/escritura y rutas inexistentes. |
+| 17 | ⏳ Pendiente | `v0-4-save-load-e2e` | v0.4 | Validar guardado y recuperación desde la UI. | RF-011. | E2E que guarda, reinicia/recarga y recupera el trabajo. |
+| 18 | ⏳ Pendiente | `v1-0-visual-regression` | v1.0 | Estabilizar snapshots visuales de preview y exportación. | RF-008, RF-010. | Snapshots Playwright deliberados y documentados. |
+| 19 | ⏳ Pendiente | `v1-0-production-hardening` | v1.0 | Completar cobertura, errores, límites y preparación para uso productivo local. | Todo el MVP. | `npm run test`, `npm run test:e2e`, `npm run build`, `cargo test`. |
 
 ## Detalle por tarea
 
@@ -69,7 +70,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** contratos claros para dimensiones físicas, diseños, planchas y resultados de layout.
 
-**Estado SDD:** implementación y tareas completas con evidencia enfocada, pero no se marca como completada porque el último `verify-report.md` nativo registra `FAIL`. Los bloqueos citados allí ya no coinciden con la configuración actual (`vitest.config.ts` excluye `tests/e2e/**` y existe `eslint.config.mjs`), por lo que el siguiente paso correcto es re-verificar y archivar, no sobreafirmar cierre desde el roadmap.
+**Estado SDD:** completada y archivada en `openspec/changes/archive/2026-06-16-v0-1-domain-model/`.
 
 **Incluye:** tipos compartidos equivalentes en TypeScript/Rust cuando aplique y helpers de conversión para preview/exportación.
 
@@ -81,6 +82,8 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** el usuario puede seleccionar PNG/SVG y la app conserva referencias persistibles por ruta.
 
+**Estado SDD:** completada y archivada en `openspec/changes/archive/2026-06-16-v0-1-design-import/`.
+
 **Incluye:** copia a `app_data_dir`, validación básica de formato/tamaño, detección de límites visibles y estado con rutas.
 
 **No incluye:** validación completa de aspect ratio; queda para `v0-2-aspect-ratio-validation`.
@@ -91,13 +94,35 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Resultado esperado:** el usuario puede mantener una lista básica de diseños y cambiar sus parámetros.
 
-**Incluye:** edición, eliminación, duplicado si se decide incluirlo como parte del CRUD inicial, y disparo de repacking.
+**Incluye:** edición, eliminación confirmada, duplicado, cantidad mínima `1` y layout pendiente de recálculo sin llamar al placeholder de packing.
 
-**No incluye:** métricas avanzadas ni validación de deformación.
+**Correcciones incluidas en esta PR (detectadas en revisión):**
+- `setSheets` ahora limpia `isLayoutStale` al recibir sheets frescos, evitando que el banner de aviso persista con datos ya actualizados.
+- `importDesign` setea `isLayoutStale: true` para ser consistente con el resto de mutaciones que modifican los diseños.
+
+**No incluye:** métricas avanzadas, validación de deformación, ni refactors de arquitectura o composición (esos van en `v0-1-domain-composition-debt`).
 
 **Docs a revisar:** `functional-requirements.md`, `user-flows.md`.
 
-### 5. `v0-1-single-sheet-packing`
+### 5. `v0-1-domain-composition-debt`
+
+**Resultado esperado:** la base de código queda saneada antes de construir sobre ella el packing y el preview, sin que ningún test existente se rompa.
+
+**Origen:** revisión de PR `v0-1-basic-editing` (#14). Los bugs de estado ya se corrigieron en esa PR; aquí quedan los problemas de arquitectura y composición.
+
+1. **Validación duplicada en vista.** `validateEditPatch` en `DesignList.tsx` replica reglas que ya existen en `validateEditableDesignInput` del dominio. El store ya devuelve `{ ok: false, errors }` — la vista debe confiar en ese contrato y eliminar la validación local.
+
+2. **`domain.ts` es un barrel, no un modelo.** El archivo mezcla primitivos/VOs, entidad `DesignInput`, tipos de import, tipos de packing y funciones de validación. Debe desglosarse en módulos alineados con Clean Architecture (p. ej. `domain/design.ts`, `domain/packing.ts`, `domain/sheet.ts`, `domain/validation.ts` o similar). Los tests de `domain.test.ts` se deben reorganizar en specs separados.
+
+3. **`DesignList` tiene demasiadas responsabilidades.** Un solo componente gestiona 9 variables de estado y tres flujos distintos (importación, edición por ítem, confirmación de borrado). Aplicar container-presentational: extraer `DesignImportForm`, `DesignItem` (con sus submodos) y un `DesignList` contenedor fino.
+
+**Incluye:** eliminación de `validateEditPatch` de la vista, separación de `domain.ts` en módulos, reorganización de tests de dominio, descomposición de `DesignList` en componentes cohesivos.
+
+**No incluye:** correcciones de bugs (ya cerradas en `v0-1-basic-editing`), nuevas funcionalidades, cambios en la UI visible, ni cambios en la lógica de negocio.
+
+**Docs a revisar:** `domain-and-data-model.md`, `architecture-and-stack.md`, `testing-strategy.md`.
+
+### 6. `v0-1-single-sheet-packing`
 
 **Resultado esperado:** el backend produce posiciones válidas en cm para una plancha.
 
@@ -107,7 +132,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `packing-and-export.md`, `domain-and-data-model.md`, `testing-strategy.md`.
 
-### 6. `v0-1-basic-preview`
+### 7. `v0-1-basic-preview`
 
 **Resultado esperado:** la UI muestra la plancha generada con proporciones correctas.
 
@@ -117,7 +142,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `functional-requirements.md`, `user-flows.md`.
 
-### 7. `v0-2-multipage-packing`
+### 8. `v0-2-multipage-packing`
 
 **Resultado esperado:** el packing continúa en nuevas planchas automáticamente.
 
@@ -127,7 +152,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `packing-and-export.md`, `functional-requirements.md`.
 
-### 8. `v0-2-rotation-support`
+### 9. `v0-2-rotation-support`
 
 **Resultado esperado:** el algoritmo puede rotar piezas solo cuando el diseño lo permite.
 
@@ -137,7 +162,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `packing-and-export.md`, `domain-and-data-model.md`.
 
-### 9. `v0-2-sheet-metrics`
+### 10. `v0-2-sheet-metrics`
 
 **Resultado esperado:** la UI informa aprovechamiento por plancha y global.
 
@@ -147,7 +172,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `functional-requirements.md`, `user-flows.md`.
 
-### 10. `v0-2-aspect-ratio-validation`
+### 11. `v0-2-aspect-ratio-validation`
 
 **Resultado esperado:** la app evita deformaciones accidentales.
 
@@ -157,7 +182,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `functional-requirements.md`, `domain-and-data-model.md`.
 
-### 11. `v0-2-tauri-integration-tests`
+### 12. `v0-2-tauri-integration-tests`
 
 **Resultado esperado:** los comandos críticos tienen cobertura de integración.
 
@@ -167,7 +192,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `architecture-and-stack.md`, `testing-strategy.md`.
 
-### 12. `v0-2-react-component-tests`
+### 13. `v0-2-react-component-tests`
 
 **Resultado esperado:** los componentes principales tienen cobertura de comportamiento visible.
 
@@ -177,7 +202,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `testing-strategy.md`, `user-flows.md`.
 
-### 13. `v0-3-png-export`
+### 14. `v0-3-png-export`
 
 **Resultado esperado:** el backend genera PNG de impresión a 300 DPI.
 
@@ -187,7 +212,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `packing-and-export.md`, `architecture-and-stack.md`.
 
-### 14. `v0-3-export-e2e`
+### 15. `v0-3-export-e2e`
 
 **Resultado esperado:** hay una prueba end-to-end que demuestra el flujo de exportación.
 
@@ -197,7 +222,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `testing-strategy.md`, `user-flows.md`.
 
-### 15. `v0-4-local-persistence`
+### 16. `v0-4-local-persistence`
 
 **Resultado esperado:** los trabajos se guardan y recuperan desde disco.
 
@@ -207,7 +232,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `architecture-and-stack.md`, `domain-and-data-model.md`, `functional-requirements.md`.
 
-### 16. `v0-4-save-load-e2e`
+### 17. `v0-4-save-load-e2e`
 
 **Resultado esperado:** el usuario puede cerrar/reabrir o recargar la app y recuperar su trabajo.
 
@@ -217,7 +242,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `testing-strategy.md`, `user-flows.md`.
 
-### 17. `v1-0-visual-regression`
+### 18. `v1-0-visual-regression`
 
 **Resultado esperado:** los cambios visuales importantes quedan protegidos por snapshots estables.
 
@@ -227,7 +252,7 @@ Este documento divide el roadmap del MVP en cambios pequeños, ordenados y verif
 
 **Docs a revisar:** `testing-strategy.md`, `roadmap-risks.md`.
 
-### 18. `v1-0-production-hardening`
+### 19. `v1-0-production-hardening`
 
 **Resultado esperado:** el MVP queda preparado para uso productivo local.
 
@@ -268,8 +293,9 @@ Docs base:
 | `v0-1-domain-model` | `v0-1-project-shell` |
 | `v0-1-design-import` | `v0-1-project-shell`, `v0-1-domain-model` |
 | `v0-1-basic-editing` | `v0-1-domain-model`, `v0-1-design-import` |
-| `v0-1-single-sheet-packing` | `v0-1-domain-model` |
-| `v0-1-basic-preview` | `v0-1-domain-model`, `v0-1-single-sheet-packing` |
+| `v0-1-domain-composition-debt` | `v0-1-basic-editing` |
+| `v0-1-single-sheet-packing` | `v0-1-domain-composition-debt` |
+| `v0-1-basic-preview` | `v0-1-single-sheet-packing` |
 | `v0-2-multipage-packing` | `v0-1-single-sheet-packing` |
 | `v0-2-rotation-support` | `v0-1-single-sheet-packing` |
 | `v0-2-sheet-metrics` | `v0-2-multipage-packing` |
