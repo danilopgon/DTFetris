@@ -84,10 +84,10 @@ export const useAppStore = create<AppState>((set) => ({
     }),
   importDesign: async (request) => {
     const design = await importDesignCommand(request)
-    set((state) => ({ designs: [...state.designs, design] }))
+    set((state) => ({ designs: [...state.designs, design], isLayoutStale: true }))
     return design
   },
-  setSheets: (sheets) => set({ sheets }),
+  setSheets: (sheets) => set({ sheets, isLayoutStale: false }),
   setSheetSize: (widthCm, heightCm) =>
     set({ sheetConfig: { widthCm, heightCm }, sheetWidthCm: widthCm, sheetHeightCm: heightCm }),
   setOptimizing: (value) => set({ isOptimizing: value }),
