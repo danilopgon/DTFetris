@@ -3,11 +3,13 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/e2e',
   use: {
-    baseURL: 'tauri://localhost',
+    baseURL: 'http://localhost:1420',
+    browserName: 'chromium',
+    trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'cargo tauri dev',
-    url: 'tauri://localhost',
+    command: 'npm run dev:vite',
+    url: 'http://localhost:1420',
     reuseExistingServer: !process.env.CI,
   },
 })

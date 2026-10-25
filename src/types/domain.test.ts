@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SHEET_CONFIG,
   getFittedVisibleSizeCm,
-  getRequestedCellPackingFootprintCm,
+  getVisiblePackingFootprintCm,
   isPositiveIntegerCm,
   validateEditableDesignInput,
   validatePackingRequest,
@@ -54,6 +54,22 @@ describe('centimeter domain validation', () => {
 })
 
 describe('editable design validation', () => {
+  it.each([undefined, null, '#123456', '#aBcDeF', '#000000', '#FFFFFF'])(
+    'accepts optional or strict RGB override %s',
+    (colorOverride) => {
+      expect(validateEditableDesignInput({ ...baseDesign, colorOverride })).toEqual([])
+    },
+  )
+
+  it.each(['', '#fff', 'red', '#12345678', '123456', ' #123456', '#12GG56', '#123456\n'])(
+    'rejects malformed RGB override %s',
+    (colorOverride) => {
+      expect(validateEditableDesignInput({ ...baseDesign, colorOverride })).toEqual([
+        { code: 'invalid_color_override', field: 'colorOverride', designId: baseDesign.id },
+      ])
+    },
+  )
+
   it('rejects quantity 0 while editing because hiding must be explicit later', () => {
     const errors = validateEditableDesignInput({ ...baseDesign, quantity: 0 })
 
@@ -105,17 +121,43 @@ describe('fitted visible artwork size', () => {
   })
 })
 
-describe('requested cell packing footprint', () => {
-  it('uses requested cell dimensions as the occupied footprint even when visible artwork is smaller', () => {
+describe('visible packing footprint', () => {
+  it('uses fitted visible bounds as footprint without replacing the user maximum dimensions', () => {
     const design = { ...baseDesign, widthCm: 10, heightCm: 8, originalAspectRatio: 25 / 19 }
     const visibleSize = getFittedVisibleSizeCm(design, design.originalAspectRatio)
 
     expect(visibleSize).toEqual({ widthCm: 10, heightCm: 7.6 })
-    expect(getRequestedCellPackingFootprintCm(design)).toEqual({ widthCm: 10, heightCm: 8 })
+    expect(getVisiblePackingFootprintCm(design)).toEqual({ widthCm: 10, heightCm: 7.6 })
+    expect(design).toMatchObject({ widthCm: 10, heightCm: 8 })
   })
 })
 
 describe('packing request validation', () => {
+  it('uses 3 mm only for new jobs; missing legacy separation is valid zero gap', () => {
+    expect(DEFAULT_SHEET_CONFIG.gapCm).toBe(0.3)
+    expect(
+      validatePackingRequest({ sheet: { widthCm: 40, heightCm: 80 }, designs: [baseDesign] }),
+    ).toEqual([])
+    expect(
+      validatePackingRequest({
+        sheet: { widthCm: 40, heightCm: 80, gapCm: 0 },
+        designs: [baseDesign],
+      }),
+    ).toEqual([])
+  })
+
+  it.each([0, 0.3, 0.125])('accepts nonnegative fractional separation %s cm', (gapCm) => {
+    expect(
+      validatePackingRequest({ sheet: { ...DEFAULT_SHEET_CONFIG, gapCm }, designs: [baseDesign] }),
+    ).toEqual([])
+  })
+
+  it.each([-0.1, NaN, Infinity, 4_294_967_296])('rejects unsafe separation %s cm', (gapCm) => {
+    expect(
+      validatePackingRequest({ sheet: { ...DEFAULT_SHEET_CONFIG, gapCm }, designs: [baseDesign] }),
+    ).toEqual([{ code: 'invalid_dimensions', field: 'sheet.gapCm' }])
+  })
+
   it('accepts a request with custom sheet dimensions and one positive quantity design', () => {
     const request: PackingRequest = {
       sheet: { widthCm: 40, heightCm: 80 },
@@ -143,7 +185,9 @@ describe('packing request validation', () => {
       designs: [],
     }
 
-    expect(validatePackingRequest(request)).toEqual([{ code: 'invalid_quantity', field: 'designs' }])
+    expect(validatePackingRequest(request)).toEqual([
+      { code: 'invalid_quantity', field: 'designs' },
+    ])
   })
 })
 
@@ -193,7 +237,14 @@ describe('VisibleBounds contract', () => {
     }
 
     // Verify field names are camelCase (as Rust uses #[serde(rename_all = "camelCase")])
-    expect(Object.keys(bounds)).toEqual(['xPx', 'yPx', 'widthPx', 'heightPx', 'sourceWidthPx', 'sourceHeightPx'])
+    expect(Object.keys(bounds)).toEqual([
+      'xPx',
+      'yPx',
+      'widthPx',
+      'heightPx',
+      'sourceWidthPx',
+      'sourceHeightPx',
+    ])
   })
 })
 

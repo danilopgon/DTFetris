@@ -1,13 +1,8 @@
-use crate::domain::packing::{validate_packing_request, PackingRequest, PackingResult};
+use crate::domain::packing::{pack, PackingRequest, PackingResult};
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn run_packing(request: PackingRequest) -> Result<PackingResult, String> {
-    validate_packing_request(&request).map_err(|reason| reason.as_str().to_string())?;
-
-    Ok(PackingResult {
-        sheets: vec![],
-        unplaced_items: vec![],
-    })
+    pack(&request)
 }
 
 #[cfg(test)]
@@ -32,7 +27,8 @@ mod tests {
     fn valid_request() -> PackingRequest {
         PackingRequest {
             sheet: SheetConfig {
-                width_cm: 55.0,
+                gap_cm: None,
+                width_cm: 60.0,
                 height_cm: 100.0,
             },
             designs: vec![DesignInput {
@@ -46,22 +42,26 @@ mod tests {
                 original_aspect_ratio: 1.5,
                 quantity: 1,
                 can_rotate: true,
+                color_override: None,
             }],
         }
     }
 
     #[test]
-    fn run_packing_returns_placeholder_packing_result_for_valid_request() {
+    fn run_packing_returns_real_placements_for_valid_request() {
         let result = run_packing(valid_request()).expect("valid request succeeds");
 
-        assert_eq!(result.sheets.len(), 0);
+        assert_eq!(result.sheets.len(), 1);
+        assert_eq!(result.sheets[0].placements.len(), 1);
+        assert_eq!(result.sheets[0].placements[0].design_id, "design-1");
         assert_eq!(result.unplaced_items.len(), 0);
     }
 
     #[test]
-    fn run_packing_rejects_invalid_request_before_placeholder_packing() {
+    fn run_packing_rejects_invalid_request() {
         let request = PackingRequest {
             sheet: SheetConfig {
+                gap_cm: None,
                 width_cm: 0.0,
                 height_cm: 100.0,
             },

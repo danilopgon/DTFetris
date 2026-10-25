@@ -29,7 +29,7 @@ vi.mock('../../store/useAppStore', () => ({
       updateDesign: mockUpdateDesign,
       duplicateDesign: mockDuplicateDesign,
       removeDesign: mockRemoveDesign,
-    })
+    }),
   ),
 }))
 
@@ -60,43 +60,43 @@ const sampleDesign: DesignInput = {
 describe('mapImportErrorToMessage (pure function)', () => {
   it('maps invalid_format to the correct Spanish message', () => {
     expect(mapImportErrorToMessage('invalid_format')).toBe(
-      'Formato no soportado. Solo se aceptan archivos PNG y SVG.'
+      'Formato no soportado. Solo se aceptan archivos PNG y SVG.',
     )
   })
 
   it('maps empty_artwork to the correct Spanish message', () => {
     expect(mapImportErrorToMessage('empty_artwork')).toBe(
-      'El diseño está vacío o es completamente transparente.'
+      'El diseño está vacío o es completamente transparente.',
     )
   })
 
   it('maps file_not_found to the correct Spanish message', () => {
     expect(mapImportErrorToMessage('file_not_found')).toBe(
-      'No se encontró el archivo seleccionado.'
+      'No se encontró el archivo seleccionado.',
     )
   })
 
   it('maps copy_failed to the correct Spanish message', () => {
     expect(mapImportErrorToMessage('copy_failed')).toBe(
-      'Error al guardar el diseño. Comprueba el espacio en disco.'
+      'Error al guardar el diseño. Comprueba el espacio en disco.',
     )
   })
 
   it('maps invalid_dimensions to the correct Spanish message', () => {
     expect(mapImportErrorToMessage('invalid_dimensions')).toBe(
-      'Las dimensiones deben ser valores positivos.'
+      'Las dimensiones deben ser valores positivos.',
     )
   })
 
   it('maps metadata_failed to the correct Spanish message', () => {
     expect(mapImportErrorToMessage('metadata_failed')).toBe(
-      'Error al procesar el archivo de imagen.'
+      'Error al procesar el archivo de imagen.',
     )
   })
 
   it('maps unknown codes to a fallback Spanish message', () => {
     expect(mapImportErrorToMessage('something_else')).toBe(
-      'Error desconocido al importar el diseño.'
+      'Error desconocido al importar el diseño.',
     )
   })
 })
@@ -136,7 +136,7 @@ describe('DesignList import UI', () => {
   it('renders a file selector button', () => {
     render(<DesignList />)
     expect(
-      screen.getByRole('button', { name: /seleccionar archivo png o svg/i })
+      screen.getByRole('button', { name: /seleccionar archivo png o svg/i }),
     ).toBeInTheDocument()
   })
 
@@ -153,12 +153,48 @@ describe('DesignList import UI', () => {
 
   // ── file selection ────────────────────────────────────────────────────────────
 
+  it('imports a batch sequentially and keeps only failed files pending for retry', async () => {
+    render(<DesignList />)
+    openMock.mockResolvedValueOnce(['/designs/one.png', '/designs/bad.svg'])
+    await userEvent.click(screen.getByRole('button', { name: /seleccionar archivo/i }))
+    await userEvent.type(screen.getByLabelText('Ancho máximo en centímetros'), '10')
+    await userEvent.type(screen.getByLabelText('Alto máximo en centímetros'), '8')
+    mockImportDesign.mockResolvedValueOnce(sampleDesign).mockRejectedValueOnce('empty_artwork')
+    await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
+    await waitFor(() => expect(mockImportDesign).toHaveBeenCalledTimes(2))
+    expect(mockImportDesign.mock.calls.map(([request]) => request.sourcePath)).toEqual([
+      '/designs/one.png',
+      '/designs/bad.svg',
+    ])
+    expect(screen.getByRole('alert')).toHaveTextContent('completamente transparente')
+    mockImportDesign.mockResolvedValueOnce(sampleDesign)
+    await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
+    await waitFor(() => expect(mockImportDesign).toHaveBeenCalledTimes(3))
+    expect(mockImportDesign.mock.calls[2][0].sourcePath).toBe('/designs/bad.svg')
+  })
+
+  it('converts the entire numeric input instead of truncating exponent notation', async () => {
+    render(<DesignList />)
+    await selectFile()
+    await userEvent.type(screen.getByLabelText('Ancho máximo en centímetros'), '1e2')
+    await userEvent.type(screen.getByLabelText('Alto máximo en centímetros'), '10')
+    mockImportDesign.mockResolvedValueOnce(sampleDesign)
+    await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
+    await waitFor(() =>
+      expect(mockImportDesign).toHaveBeenCalledWith({
+        sourcePath: '/path/to/logo.png',
+        widthCm: 100,
+        heightCm: 10,
+      }),
+    )
+  })
+
   it('clicking the file selector button opens the file dialog', async () => {
     openMock.mockResolvedValueOnce(null)
     render(<DesignList />)
     await userEvent.click(screen.getByRole('button', { name: /seleccionar/i }))
     expect(openMock).toHaveBeenCalledWith({
-      multiple: false,
+      multiple: true,
       filters: [{ name: 'Imágenes PNG y SVG', extensions: ['png', 'svg'] }],
     })
   })
@@ -175,7 +211,7 @@ describe('DesignList import UI', () => {
     await userEvent.click(screen.getByRole('button', { name: /seleccionar/i }))
     await waitFor(() => expect(openMock).toHaveBeenCalled())
     expect(screen.getByRole('button', { name: /seleccionar/i })).toHaveTextContent(
-      'Seleccionar PNG o SVG'
+      'Seleccionar PNG o SVG',
     )
   })
 
@@ -185,7 +221,7 @@ describe('DesignList import UI', () => {
     await userEvent.click(screen.getByRole('button', { name: /seleccionar/i }))
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'No se pudo abrir el selector de archivos.'
+        'No se pudo abrir el selector de archivos.',
       )
     })
   })
@@ -281,7 +317,7 @@ describe('DesignList import UI', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /seleccionar/i })).toHaveTextContent(
-        'Seleccionar PNG o SVG'
+        'Seleccionar PNG o SVG',
       )
     })
     expect(screen.getByLabelText(/ancho/i)).toHaveValue(null)
@@ -308,7 +344,7 @@ describe('DesignList import UI', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'Formato no soportado. Solo se aceptan archivos PNG y SVG.'
+        'Formato no soportado. Solo se aceptan archivos PNG y SVG.',
       )
     })
   })
@@ -322,7 +358,7 @@ describe('DesignList import UI', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'El diseño está vacío o es completamente transparente.'
+        'El diseño está vacío o es completamente transparente.',
       )
     })
   })
@@ -336,7 +372,7 @@ describe('DesignList import UI', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(
-        'Error al guardar el diseño. Comprueba el espacio en disco.'
+        'Error al guardar el diseño. Comprueba el espacio en disco.',
       )
     })
   })
@@ -363,6 +399,49 @@ describe('DesignList editing UI', () => {
     render(<DesignList />)
   }
 
+  it('rejects invalid color text in Spanish without mutating the design', async () => {
+    renderWithDesign()
+    await userEvent.click(screen.getByRole('button', { name: 'Editar logo.png' }))
+    await userEvent.type(screen.getByLabelText('Color único (opcional)'), '#fff')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('El color debe tener el formato #RRGGBB')
+    expect(screen.getByLabelText('Color único (opcional)')).toHaveAttribute('aria-invalid', 'true')
+    expect(mockUpdateDesign).not.toHaveBeenCalled()
+  })
+
+  it.each(['png', 'svg'] as const)(
+    'saves a valid color on %s without changing the original',
+    async (format) => {
+      mockUpdateDesign.mockReturnValueOnce({ ok: true })
+      renderWithDesign({ format })
+      await userEvent.click(screen.getByRole('button', { name: 'Editar logo.png' }))
+      await userEvent.type(screen.getByLabelText('Color único (opcional)'), '#aB12ef')
+      await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+      expect(mockUpdateDesign).toHaveBeenCalledWith(
+        sampleDesign.id,
+        expect.objectContaining({ colorOverride: '#aB12ef' }),
+      )
+      expect(mockDesigns[0]).toEqual({ ...sampleDesign, format })
+    },
+  )
+
+  it('explicitly clears a saved override, including invalid draft text', async () => {
+    mockUpdateDesign.mockReturnValueOnce({ ok: true })
+    renderWithDesign({ colorOverride: '#123456' })
+    await userEvent.click(screen.getByRole('button', { name: 'Editar logo.png' }))
+    expect(screen.getByLabelText('Color único (opcional)')).toHaveValue('#123456')
+    await userEvent.type(screen.getByLabelText('Color único (opcional)'), 'oops')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Usar colores originales' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Color único (opcional)')).toHaveValue('')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    expect(mockUpdateDesign).toHaveBeenCalledWith(
+      sampleDesign.id,
+      expect.objectContaining({ colorOverride: null }),
+    )
+  })
+
   it('edits name, requested cell dimensions, quantity, and rotation with Spanish controls', async () => {
     mockUpdateDesign.mockReturnValueOnce({ ok: true })
     renderWithDesign()
@@ -370,15 +449,15 @@ describe('DesignList editing UI', () => {
     await userEvent.click(screen.getByRole('button', { name: /editar logo\.png/i }))
     await userEvent.clear(screen.getByLabelText('Nombre'))
     await userEvent.type(screen.getByLabelText('Nombre'), 'Logo principal')
-    await userEvent.clear(screen.getByLabelText('Ancho solicitado (cm)'))
-    await userEvent.type(screen.getByLabelText('Ancho solicitado (cm)'), '12')
-    await userEvent.clear(screen.getByLabelText('Alto solicitado (cm)'))
-    await userEvent.type(screen.getByLabelText('Alto solicitado (cm)'), '9')
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Ancho máximo (cm)' }))
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Ancho máximo (cm)' }), '12')
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Alto máximo (cm)' }))
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Alto máximo (cm)' }), '9')
     await userEvent.clear(screen.getByLabelText('Cantidad'))
     await userEvent.type(screen.getByLabelText('Cantidad'), '3')
     await userEvent.click(screen.getByLabelText('Permitir rotación'))
-    expect(screen.getByText(/celda solicitada/i)).toHaveTextContent(
-      'La celda solicitada define el espacio ocupado; el arte se ajusta proporcionalmente sin deformarse.'
+    expect(screen.getByText(/Las medidas máximas limitan/i)).toHaveTextContent(
+      'Las medidas máximas limitan el tamaño del arte, que se ajusta proporcionalmente sin deformarse. Solo su rectángulo visible ocupa espacio en la plancha.',
     )
     await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
 
@@ -407,12 +486,12 @@ describe('DesignList editing UI', () => {
     renderWithDesign()
 
     await userEvent.click(screen.getByRole('button', { name: /editar logo\.png/i }))
-    await userEvent.clear(screen.getByLabelText('Ancho solicitado (cm)'))
-    await userEvent.type(screen.getByLabelText('Ancho solicitado (cm)'), '10.5')
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Ancho máximo (cm)' }))
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Ancho máximo (cm)' }), '10.5')
     await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'El ancho solicitado debe ser un número entero mayor que 0.'
+      'El ancho máximo debe ser un número entero mayor que 0.',
     )
     expect(mockUpdateDesign).not.toHaveBeenCalled()
   })
@@ -461,6 +540,8 @@ describe('DesignList editing UI', () => {
     mockIsLayoutStale = true
     renderWithDesign()
 
-    expect(screen.getByRole('status')).toHaveTextContent('El diseño cambió. Recalcula la plancha para actualizar el resultado.')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'El diseño cambió. Recalcula la plancha para actualizar el resultado.',
+    )
   })
 })

@@ -28,11 +28,13 @@ export type ImportDesignErrorCode =
 export type SheetConfig = {
   widthCm: Cm
   heightCm: Cm
+  gapCm?: number
 }
 
 export const DEFAULT_SHEET_CONFIG: SheetConfig = {
-  widthCm: 55,
+  widthCm: 60,
   heightCm: 100,
+  gapCm: 0.3,
 }
 
 export type DesignInput = {
@@ -46,9 +48,12 @@ export type DesignInput = {
   canRotate: boolean
   format: ImageFormat
   visibleBounds: VisibleBounds
+  colorOverride?: string | null
 }
 
-export type DesignUpdatePatch = Partial<Pick<DesignInput, 'name' | 'widthCm' | 'heightCm' | 'quantity' | 'canRotate'>>
+export type DesignUpdatePatch = Partial<
+  Pick<DesignInput, 'name' | 'widthCm' | 'heightCm' | 'quantity' | 'canRotate' | 'colorOverride'>
+>
 
 export type Placement = {
   designId: string
@@ -63,6 +68,7 @@ export type Sheet = {
   id: string
   widthCm: Cm
   heightCm: Cm
+  gapCm?: number
   placements: Placement[]
 }
 
@@ -88,7 +94,17 @@ export type PackingResult = {
   unplacedItems: UnplacedItem[]
 }
 
-export type DomainValidationErrorCode = UnplacedReasonCode | 'invalid_quantity' | 'invalid_name'
+export type DomainValidationErrorCode =
+  | UnplacedReasonCode
+  | 'invalid_quantity'
+  | 'invalid_name'
+  | 'invalid_color_override'
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+export function isValidColorOverride(value: unknown): value is string | null | undefined {
+  return value == null || (typeof value === 'string' && value.length === 7 && HEX_COLOR.test(value))
+}
 
 export type DomainValidationError = {
   code: DomainValidationErrorCode
@@ -97,11 +113,21 @@ export type DomainValidationError = {
 }
 
 export function isPositiveIntegerCm(value: number): value is Cm {
-  return Number.isFinite(value) && Number.isInteger(value) && value > 0
+  return Number.isFinite(value) && Number.isInteger(value) && value > 0 && value <= 4_294_967_295
+}
+
+export function isValidGapCm(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 4_294_967_295
 }
 
 function isEditableQuantity(value: number): boolean {
   return Number.isInteger(value) && value >= 1
+}
+
+export type Job = {
+  version: 1
+  sheetConfig: SheetConfig
+  designs: DesignInput[]
 }
 
 export function validateEditableDesignInput(design: DesignInput): DomainValidationError[] {
@@ -123,35 +149,36 @@ export function validateEditableDesignInput(design: DesignInput): DomainValidati
     errors.push({ code: 'invalid_name', field: 'name', designId: design.id })
   }
 
+  if (!isValidColorOverride(design.colorOverride)) {
+    errors.push({ code: 'invalid_color_override', field: 'colorOverride', designId: design.id })
+  }
+
   return errors
 }
 
 export function getFittedVisibleSizeCm(
-  requestedCell: Pick<DesignInput, 'widthCm' | 'heightCm'>,
-  artworkAspectRatio: number
+  maximumSize: Pick<DesignInput, 'widthCm' | 'heightCm'>,
+  artworkAspectRatio: number,
 ): Pick<DesignInput, 'widthCm' | 'heightCm'> {
-  const cellRatio = requestedCell.widthCm / requestedCell.heightCm
+  const maximumRatio = maximumSize.widthCm / maximumSize.heightCm
 
-  if (artworkAspectRatio > cellRatio) {
+  if (artworkAspectRatio > maximumRatio) {
     return {
-      widthCm: requestedCell.widthCm,
-      heightCm: requestedCell.widthCm / artworkAspectRatio,
+      widthCm: maximumSize.widthCm,
+      heightCm: maximumSize.widthCm / artworkAspectRatio,
     }
   }
 
   return {
-    widthCm: requestedCell.heightCm * artworkAspectRatio,
-    heightCm: requestedCell.heightCm,
+    widthCm: maximumSize.heightCm * artworkAspectRatio,
+    heightCm: maximumSize.heightCm,
   }
 }
 
-export function getRequestedCellPackingFootprintCm(
-  requestedCell: Pick<DesignInput, 'widthCm' | 'heightCm'>
+export function getVisiblePackingFootprintCm(
+  design: Pick<DesignInput, 'widthCm' | 'heightCm' | 'originalAspectRatio'>,
 ): Pick<DesignInput, 'widthCm' | 'heightCm'> {
-  return {
-    widthCm: requestedCell.widthCm,
-    heightCm: requestedCell.heightCm,
-  }
+  return getFittedVisibleSizeCm(design, design.originalAspectRatio)
 }
 
 export function validatePackingRequest(request: PackingRequest): DomainValidationError[] {
@@ -163,6 +190,10 @@ export function validatePackingRequest(request: PackingRequest): DomainValidatio
 
   if (!isPositiveIntegerCm(request.sheet.heightCm)) {
     errors.push({ code: 'invalid_dimensions', field: 'sheet.heightCm' })
+  }
+
+  if (!isValidGapCm(request.sheet.gapCm ?? 0)) {
+    errors.push({ code: 'invalid_dimensions', field: 'sheet.gapCm' })
   }
 
   for (const design of request.designs) {

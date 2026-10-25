@@ -1,7 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DesignInput, ImportDesignRequest, PackingRequest, PackingResult, VisibleBounds } from '../types/domain'
-import { importDesign, runPacking } from './index'
+import type {
+  DesignInput,
+  ImportDesignRequest,
+  PackingRequest,
+  PackingResult,
+  VisibleBounds,
+} from '../types/domain'
+import { exportPng, importDesign, loadJob, runPacking, saveJob } from './index'
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -30,6 +36,54 @@ const baseDesignResult: DesignInput = {
   format: 'png',
   visibleBounds: baseVisibleBounds,
 }
+
+describe('export and persistence contracts', () => {
+  beforeEach(() => invokeMock.mockReset())
+  it('preserves optional color through save/load and sends it unchanged to Rust export', async () => {
+    const designs = [
+      { ...baseDesignResult, colorOverride: '#Aa1234' },
+      { ...baseDesignResult, id: 'cleared', colorOverride: null },
+      { ...baseDesignResult, id: 'legacy' },
+    ]
+    const job = { version: 1 as const, sheetConfig: { widthCm: 60, heightCm: 100 }, designs }
+    invokeMock
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(job)
+      .mockResolvedValueOnce(['/out/color.png'])
+    await saveJob(job, '/out/job.json')
+    const restored = await loadJob('/out/job.json')
+    await exportPng([], restored.designs, '/out/color.png')
+    expect(restored).toEqual(job)
+    expect(invokeMock).toHaveBeenLastCalledWith('export_png', {
+      sheets: [],
+      designs,
+      outputPath: '/out/color.png',
+    })
+  })
+  it('sends assets with sheets and returns actual exported file paths', async () => {
+    invokeMock.mockResolvedValueOnce(['/out/plancha.png'])
+    await expect(exportPng([], [baseDesignResult], '/out/plancha.png')).resolves.toEqual([
+      '/out/plancha.png',
+    ])
+    expect(invokeMock).toHaveBeenCalledWith('export_png', {
+      sheets: [],
+      designs: [baseDesignResult],
+      outputPath: '/out/plancha.png',
+    })
+  })
+  it('roundtrips typed versioned job inputs without browser files or trusted layouts', async () => {
+    const job = {
+      version: 1 as const,
+      sheetConfig: { widthCm: 60, heightCm: 100 },
+      designs: [baseDesignResult],
+    }
+    invokeMock.mockResolvedValueOnce(undefined).mockResolvedValueOnce(job)
+    await saveJob(job, '/out/job.json')
+    await expect(loadJob('/out/job.json')).resolves.toEqual(job)
+    expect(invokeMock).toHaveBeenNthCalledWith(1, 'save_job', { job, path: '/out/job.json' })
+    expect(invokeMock).toHaveBeenNthCalledWith(2, 'load_job', { path: '/out/job.json' })
+  })
+})
 
 describe('runPacking command wrapper', () => {
   beforeEach(() => {
