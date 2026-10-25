@@ -7,15 +7,15 @@ Estos flujos muestran cómo viajan los datos entre usuario, frontend y backend R
 ```text
 Usuario introduce ancho y alto solicitados en cm enteros en el panel lateral
   -> Usuario pulsa "Importar diseño"
-  -> Se abre el selector de archivo (filtro: PNG y SVG únicamente)
+   -> Se abre el selector de uno o varios archivos (filtro: PNG y SVG únicamente)
   -> Si el usuario cancela: flujo termina, no hay cambios
-  -> Si el usuario selecciona un archivo:
+   -> Por cada archivo seleccionado, secuencialmente:
        -> Frontend llama a store.importDesign({ sourcePath, widthCm, heightCm })
        -> Rust valida extensión, lee el archivo y detecta los límites visibles
        -> Rust copia el archivo a app_data_dir/design-assets/{uuid}.{ext}
        -> Rust devuelve DesignInput con format, visibleBounds y cm confirmados
        -> Frontend añade el diseño a la lista (acumulativo, no reemplaza)
-  -> Si hay error: se muestra mensaje en español; la lista no cambia
+   -> Si hay error: se muestra mensaje en español; ese archivo queda pendiente y los éxitos anteriores se conservan
 
 Errores posibles y mensajes en español:
   - invalid_format  → "Formato no soportado. Solo se aceptan archivos PNG y SVG."
@@ -28,9 +28,10 @@ Errores posibles y mensajes en español:
 
 ```text
 Usuario configura diseños y pulsa "Generar"
-  -> invoke('run_packing', { designs, sheetWidth, sheetHeight })
-  -> Rust ejecuta MaxRects en centímetros sobre el área visible del diseño
-  -> Rust devuelve Vec<Sheet> con placements
+  -> invoke('run_packing', { request: { designs, sheet: sheetConfig } })
+  -> Rust ejecuta MaxRects en centímetros sobre la celda solicitada de cada copia
+  -> Rust devuelve PackingResult { sheets, unplacedItems }
+  -> Si hay copias que no caben, UI muestra nombres y bloquea exportación; no se omiten en silencio
 ```
 
 ## Editar, duplicar y eliminar diseños
@@ -69,21 +70,26 @@ Frontend recibe sheets
 
 ```text
 Usuario pulsa "Exportar"
-  -> invoke('export_png', { sheets, outputPath })
+   -> Selector nativo pide nombre PNG de destino
+   -> invoke('export_png', { sheets, designs, outputPath })
   -> Rust lee archivos originales del disco
   -> Si PNG: image composita directamente
   -> Si SVG: resvg rasteriza a bitmap en memoria, image composita el resultado
   -> Rust escala el arte visible a las dimensiones configuradas y compone la plancha final a 300 DPI
-  -> Rust escribe PNG final en disco
+   -> Rust escribe PNG con alpha y pHYs de 300 DPI, una plancha en memoria cada vez
+   -> Una hoja: nombre solicitado. Varias: sufijos -001, -002, etc.
+   -> Si un destino existe, exige otro nombre; nunca sobrescribe PNG existentes
+   -> UI muestra rutas de los archivos terminados; un fallo no anuncia éxito
 ```
 
 ## Guardar trabajo
 
 ```text
 Usuario guarda el trabajo
-  -> invoke('save_job', { job })
+   -> Selector nativo pide ruta JSON
+   -> invoke('save_job', { job: { version: 1, sheetConfig, designs }, path })
   -> Rust serializa a JSON con serde_json
-  -> Rust escribe el JSON en app_data_dir
+   -> Rust valida diseños/archivos y reemplaza el JSON atómicamente en la ruta elegida
 ```
 
 ## Recuperar trabajo
@@ -93,12 +99,14 @@ Usuario abre un trabajo guardado
   -> invoke('load_job', { path })
   -> Rust lee JSON desde disco
   -> Rust deserializa el estado
-  -> Frontend recupera diseños, configuración y planchas
+   -> Rust comprueba versión, entradas y assets locales (ausentes/corruptos se rechazan)
+   -> Frontend recupera diseños/configuración solo después del éxito y marca layout pendiente
+   -> Usuario pulsa Generar planchas; el resultado puede volver a exportarse
 ```
 
 ## Cambios que disparan repacking
 
-Mientras `run_packing` siga siendo placeholder, el sistema no fabrica posiciones ni invoca packing desde las mutaciones. En su lugar marca el layout como pendiente de recálculo cuando cambia cualquiera de estos valores:
+El sistema limpia el layout y pide generar de nuevo cuando cambia cualquiera de estos valores:
 
 - Ancho o alto de un diseño.
 - Cantidad.

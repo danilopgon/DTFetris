@@ -31,7 +31,7 @@ export type SheetConfig = {
 }
 
 export const DEFAULT_SHEET_CONFIG: SheetConfig = {
-  widthCm: 55,
+  widthCm: 60,
   heightCm: 100,
 }
 
@@ -48,7 +48,9 @@ export type DesignInput = {
   visibleBounds: VisibleBounds
 }
 
-export type DesignUpdatePatch = Partial<Pick<DesignInput, 'name' | 'widthCm' | 'heightCm' | 'quantity' | 'canRotate'>>
+export type DesignUpdatePatch = Partial<
+  Pick<DesignInput, 'name' | 'widthCm' | 'heightCm' | 'quantity' | 'canRotate'>
+>
 
 export type Placement = {
   designId: string
@@ -97,11 +99,17 @@ export type DomainValidationError = {
 }
 
 export function isPositiveIntegerCm(value: number): value is Cm {
-  return Number.isFinite(value) && Number.isInteger(value) && value > 0
+  return Number.isFinite(value) && Number.isInteger(value) && value > 0 && value <= 4_294_967_295
 }
 
 function isEditableQuantity(value: number): boolean {
   return Number.isInteger(value) && value >= 1
+}
+
+export type Job = {
+  version: 1
+  sheetConfig: SheetConfig
+  designs: DesignInput[]
 }
 
 export function validateEditableDesignInput(design: DesignInput): DomainValidationError[] {
@@ -128,7 +136,7 @@ export function validateEditableDesignInput(design: DesignInput): DomainValidati
 
 export function getFittedVisibleSizeCm(
   requestedCell: Pick<DesignInput, 'widthCm' | 'heightCm'>,
-  artworkAspectRatio: number
+  artworkAspectRatio: number,
 ): Pick<DesignInput, 'widthCm' | 'heightCm'> {
   const cellRatio = requestedCell.widthCm / requestedCell.heightCm
 
@@ -146,7 +154,7 @@ export function getFittedVisibleSizeCm(
 }
 
 export function getRequestedCellPackingFootprintCm(
-  requestedCell: Pick<DesignInput, 'widthCm' | 'heightCm'>
+  requestedCell: Pick<DesignInput, 'widthCm' | 'heightCm'>,
 ): Pick<DesignInput, 'widthCm' | 'heightCm'> {
   return {
     widthCm: requestedCell.widthCm,

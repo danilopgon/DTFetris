@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesignInput, ImportDesignRequest, VisibleBounds } from '../types/domain'
-import { DEFAULT_SHEET_CONFIG, getFittedVisibleSizeCm, getRequestedCellPackingFootprintCm } from '../types/domain'
+import {
+  DEFAULT_SHEET_CONFIG,
+  getFittedVisibleSizeCm,
+  getRequestedCellPackingFootprintCm,
+} from '../types/domain'
 import { useAppStore } from './useAppStore'
 
 vi.mock('../commands', () => ({
@@ -39,13 +43,22 @@ function makeDesign(overrides: Partial<DesignInput> = {}): DesignInput {
 }
 
 describe('useAppStore sheet configuration', () => {
-  it('initializes new work with the default 55 cm x 100 cm sheet configuration', () => {
+  it('invalidates sheets when size changes and ignores invalid dimensions', () => {
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    useAppStore.getState().setSheets([{ id: 'old', widthCm: 60, heightCm: 100, placements: [] }])
+    useAppStore.getState().setSheetSize(40, 80)
+    expect(useAppStore.getState().sheets).toEqual([])
+    expect(useAppStore.getState().isLayoutStale).toBe(true)
+    useAppStore.getState().setSheetSize(0, 10)
+    expect(useAppStore.getState().sheetConfig).toEqual({ widthCm: 40, heightCm: 80 })
+  })
+  it('initializes new work with the default 60 cm x 100 cm sheet configuration', () => {
     useAppStore.setState(useAppStore.getInitialState(), true)
 
     const state = useAppStore.getState()
 
     expect(state.sheetConfig).toEqual(DEFAULT_SHEET_CONFIG)
-    expect(state.sheetWidthCm).toBe(55)
+    expect(state.sheetWidthCm).toBe(60)
     expect(state.sheetHeightCm).toBe(100)
   })
 
@@ -63,6 +76,26 @@ describe('useAppStore sheet configuration', () => {
 })
 
 describe('useAppStore importDesign action', () => {
+  it('never appends an old import into a newly restored job', async () => {
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    let resolve!: (design: DesignInput) => void
+    importDesignMock.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done
+        }),
+    )
+    const pending = useAppStore
+      .getState()
+      .importDesign({ sourcePath: '/design.png', widthCm: 10, heightCm: 8 })
+    expect(useAppStore.getState().isImporting).toBe(true)
+    useAppStore
+      .getState()
+      .restoreJob({ version: 1, sheetConfig: { widthCm: 30, heightCm: 40 }, designs: [] })
+    resolve(makeDesign())
+    await expect(pending).rejects.toThrow('El trabajo cambió')
+    expect(useAppStore.getState()).toMatchObject({ designs: [], isImporting: false })
+  })
   beforeEach(() => {
     useAppStore.setState(useAppStore.getInitialState(), true)
     importDesignMock.mockReset()
@@ -71,24 +104,38 @@ describe('useAppStore importDesign action', () => {
 
   it('appends exactly one design to an empty list on successful import', async () => {
     const design = makeDesign()
-    const request: ImportDesignRequest = { sourcePath: '/designs/logo.png', widthCm: 10, heightCm: 8 }
+    const request: ImportDesignRequest = {
+      sourcePath: '/designs/logo.png',
+      widthCm: 10,
+      heightCm: 8,
+    }
     importDesignMock.mockResolvedValueOnce(design)
 
     await useAppStore.getState().importDesign(request)
 
     expect(useAppStore.getState().designs).toHaveLength(1)
     expect(useAppStore.getState().designs[0]).toEqual(design)
+    expect(useAppStore.getState().sheets).toEqual([])
+    expect(useAppStore.getState().isLayoutStale).toBe(true)
   })
 
   it('appends a second design without replacing the first (cumulative)', async () => {
     const first = makeDesign({ id: 'design-first', name: 'first.png' })
     const second = makeDesign({ id: 'design-second', name: 'second.png' })
-    const request: ImportDesignRequest = { sourcePath: '/designs/first.png', widthCm: 10, heightCm: 8 }
+    const request: ImportDesignRequest = {
+      sourcePath: '/designs/first.png',
+      widthCm: 10,
+      heightCm: 8,
+    }
     importDesignMock.mockResolvedValueOnce(first)
 
     await useAppStore.getState().importDesign(request)
 
-    const request2: ImportDesignRequest = { sourcePath: '/designs/second.png', widthCm: 10, heightCm: 8 }
+    const request2: ImportDesignRequest = {
+      sourcePath: '/designs/second.png',
+      widthCm: 10,
+      heightCm: 8,
+    }
     importDesignMock.mockResolvedValueOnce(second)
 
     await useAppStore.getState().importDesign(request2)
@@ -99,7 +146,11 @@ describe('useAppStore importDesign action', () => {
   })
 
   it('leaves the design list unchanged when import fails', async () => {
-    const request: ImportDesignRequest = { sourcePath: '/designs/invalid.jpg', widthCm: 10, heightCm: 8 }
+    const request: ImportDesignRequest = {
+      sourcePath: '/designs/invalid.jpg',
+      widthCm: 10,
+      heightCm: 8,
+    }
     importDesignMock.mockRejectedValueOnce('invalid_format')
 
     await expect(useAppStore.getState().importDesign(request)).rejects.toBe('invalid_format')
@@ -109,18 +160,81 @@ describe('useAppStore importDesign action', () => {
 
   it('leaves existing designs unchanged when a second import fails', async () => {
     const first = makeDesign({ id: 'design-first' })
-    const request1: ImportDesignRequest = { sourcePath: '/designs/first.png', widthCm: 10, heightCm: 8 }
+    const request1: ImportDesignRequest = {
+      sourcePath: '/designs/first.png',
+      widthCm: 10,
+      heightCm: 8,
+    }
     importDesignMock.mockResolvedValueOnce(first)
 
     await useAppStore.getState().importDesign(request1)
 
-    const request2: ImportDesignRequest = { sourcePath: '/designs/blank.png', widthCm: 10, heightCm: 8 }
+    const request2: ImportDesignRequest = {
+      sourcePath: '/designs/blank.png',
+      widthCm: 10,
+      heightCm: 8,
+    }
     importDesignMock.mockRejectedValueOnce('empty_artwork')
 
     await expect(useAppStore.getState().importDesign(request2)).rejects.toBe('empty_artwork')
 
     expect(useAppStore.getState().designs).toHaveLength(1)
     expect(useAppStore.getState().designs[0]).toEqual(first)
+  })
+})
+
+describe('packing orchestration', () => {
+  beforeEach(() => {
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    runPackingMock.mockReset()
+  })
+
+  it('generates sheets and preserves explicit unplaced copies', async () => {
+    useAppStore.getState().addDesign(makeDesign())
+    const result = {
+      sheets: [{ id: 'sheet-1', widthCm: 60, heightCm: 100, placements: [] }],
+      unplacedItems: [{ designId: 'design-1', itemIndex: 0, reason: 'does_not_fit' as const }],
+    }
+    runPackingMock.mockResolvedValue(result)
+    await useAppStore.getState().generateSheets()
+    expect(runPackingMock).toHaveBeenCalledWith({
+      sheet: { widthCm: 60, heightCm: 100 },
+      designs: [makeDesign()],
+    })
+    expect(useAppStore.getState()).toMatchObject({
+      ...result,
+      isLayoutStale: false,
+      isOptimizing: false,
+    })
+  })
+
+  it('does not apply an asynchronous result after designs change', async () => {
+    useAppStore.getState().addDesign(makeDesign())
+    let resolve!: (value: { sheets: []; unplacedItems: [] }) => void
+    runPackingMock.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done
+        }),
+    )
+    const pending = useAppStore.getState().generateSheets()
+    useAppStore.getState().updateDesign('design-1', { quantity: 2 })
+    resolve({ sheets: [], unplacedItems: [] })
+    await pending
+    expect(useAppStore.getState()).toMatchObject({
+      sheets: [],
+      isLayoutStale: true,
+      isOptimizing: false,
+    })
+  })
+
+  it('clears loading on failure and rejects empty requests without invoking Rust', async () => {
+    await expect(useAppStore.getState().generateSheets()).rejects.toThrow()
+    expect(runPackingMock).not.toHaveBeenCalled()
+    useAppStore.getState().addDesign(makeDesign())
+    runPackingMock.mockRejectedValueOnce('invalid_dimensions')
+    await expect(useAppStore.getState().generateSheets()).rejects.toBe('invalid_dimensions')
+    expect(useAppStore.getState().isOptimizing).toBe(false)
   })
 })
 
@@ -139,7 +253,9 @@ describe('useAppStore design editing actions', () => {
           id: 'sheet-1',
           widthCm: 55,
           heightCm: 100,
-          placements: [{ designId: design.id, xCm: 0, yCm: 0, widthCm: 10, heightCm: 8, rotated: false }],
+          placements: [
+            { designId: design.id, xCm: 0, yCm: 0, widthCm: 10, heightCm: 8, rotated: false },
+          ],
         },
       ],
       isLayoutStale: false,

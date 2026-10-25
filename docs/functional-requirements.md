@@ -4,7 +4,7 @@ Estos requisitos describen el comportamiento visible del MVP. Las reglas técnic
 
 ## RF-001 - Importación de diseños
 
-El usuario importará un único archivo PNG o SVG por operación. Cada importación exitosa agrega un diseño a la lista existente sin reemplazar los anteriores (acumulativo).
+El usuario puede seleccionar uno o varios archivos PNG/SVG por operación. La celda confirmada se aplica inicialmente a todos y después puede editarse por diseño. El frontend importa secuencialmente para limitar memoria; cada éxito se añade acumulativamente. Si alguno falla, conserva los éxitos y mantiene solo los fallidos seleccionados para reintentar.
 
 Antes de confirmar la importación, el usuario debe introducir el ancho y alto solicitados en centímetros enteros para la celda del diseño. El sistema no infiere dimensiones físicas a partir del `viewBox` ni de los metadatos del archivo.
 
@@ -13,6 +13,8 @@ El archivo se copia al directorio de datos de la aplicación (`app_data_dir/desi
 Al importar un diseño, el sistema detecta los límites visibles (bounding box sin padding transparente) usando la crate `image` para PNG y `resvg` para SVG. La transparencia alrededor del arte no forma parte del tamaño físico impreso ni de la superficie ocupada en la plancha.
 
 Si el archivo está ausente, tiene formato no soportado, es malformado, o el área visible es completamente transparente, el sistema rechaza la importación con un mensaje de error en español y no añade ningún diseño a la lista.
+
+Límites del MVP: 20 MiB, 32 millones de píxeles y 16384 píxeles por lado por archivo. Los SVG deben ser autocontenidos y convertir texto a trazados; no se admiten imágenes anidadas, contenido HTML, scripts ni patrones. Se rechazan estas funciones, no se eliminan silenciosamente del resultado. Las mismas reglas se aplican al guardar, abrir y exportar.
 
 ## RF-002 - Configuración de diseño
 
@@ -82,7 +84,7 @@ El área utilizada se calculará sobre el rectángulo físico del arte visible c
 
 El sistema permitirá exportar planchas como PNG a 300 DPI.
 
-La composición se realizará en Rust con la crate `image`, sin pasar por Canvas del navegador. Esto evita las limitaciones de memoria del entorno web para imágenes de gran tamaño. Una plancha de 55 x 100 cm a 300 DPI produce aproximadamente 220 MB sin comprimir.
+La composición se realizará en Rust con la crate `image`, sin pasar por Canvas del navegador. Una plancha predeterminada de 60 × 100 cm a 300 DPI produce 7087 × 11811 píxeles y aproximadamente 335 MB RGBA sin comprimir. Las dimensiones siguen siendo configurables.
 
 ## RF-011 - Persistencia local
 
@@ -92,9 +94,9 @@ El estado se serializa como JSON mediante `serde_json` y se escribe en disco con
 
 No se utiliza `localStorage` ni `IndexedDB`. La persistencia es responsabilidad del backend Rust, lo que elimina el problema de serialización de objetos `File`.
 
-## RF-012 - Repacking automático
+## RF-012 - Invalidación y recálculo seguro
 
-Hasta que exista packing real, cualquier edición, duplicado o eliminación de diseño invalida las planchas existentes: el frontend limpia el layout actual o lo marca como pendiente de recálculo. Esta etapa no invoca el placeholder `run_packing` ni fabrica posiciones.
+Importar, añadir, editar, duplicar, eliminar o cambiar la plancha invalida y limpia la composición. El botón **Generar planchas** ejecuta el packing real. Se elige recálculo explícito para no lanzar trabajos pesados por cada cambio de formulario. Una respuesta obsoleta no sustituye al estado actualizado. Exportar está bloqueado hasta generar un layout vigente y ubicar todas las copias.
 
 ## RF-013 - Configuración de plancha
 
@@ -109,11 +111,6 @@ No existirán dimensiones hardcodeadas en el dominio.
 
 El sistema detectará automáticamente la relación de aspecto original de la imagen en el momento de la carga.
 
-Si las dimensiones configuradas deforman el diseño:
-
-- Se mostrara una advertencia.
-- Se ofrecerá ajustar automáticamente para mantener la proporción.
-
-La deformación deliberada requerirá confirmación explícita del usuario.
+La UI indica la celda solicitada y el tamaño visible derivado. Si las proporciones difieren, el arte se centra y ajusta proporcionalmente dentro de la celda; nunca se estira. El MVP no ofrece deformación deliberada (por tanto no requiere confirmación de una operación que no existe).
 
 El aspect ratio original se almacena en el modelo como campo explícito e inmutable y se calcula en el momento de la carga a partir del ancho y alto de los límites visibles detectados. Para SVG, el `viewBox` puede definir el espacio inicial de rasterización, pero la proporción final sale de los límites visibles después de rasterizar y aplicar el umbral alpha.
