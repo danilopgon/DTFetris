@@ -14,7 +14,7 @@ Esta carpeta reemplaza el BRS monolítico por documentos enfocados. Úsala como 
 | Packing, multipágina y exportación | [packing-and-export.md](./packing-and-export.md) |
 | Estrategia de testing | [testing-strategy.md](./testing-strategy.md) |
 | Roadmap, riesgos y restricciones | [roadmap-risks.md](./roadmap-risks.md) |
-| Roadmap dividido en cambios implementables con SDD | [sdd-roadmap-tasks.md](./sdd-roadmap-tasks.md) |
+| Incrementos, dependencias, aceptación y evidencia real | [roadmap.md](./roadmap.md) |
 
 ## Estado del producto
 
