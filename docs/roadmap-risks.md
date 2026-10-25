@@ -1,60 +1,23 @@
-# Roadmap, Riesgos y Restricciones
+# Riesgos y restricciones
 
-Este documento concentra la secuencia de entrega, restricciones y riesgos técnicos que deben revisarse antes de implementar.
+La secuencia de entrega y el estado verificable viven únicamente en [roadmap.md](./roadmap.md).
 
-## Roadmap
+| Riesgo | Mitigación |
+|---|---|
+| Packing incorrecto | MaxRects puro en cm; tests de límites, no solapamiento, conteo y determinismo con fixtures reproducibles. |
+| Memoria a 300 DPI | Una plancha a la vez; límites de raster y recursos antes de decodificar; salida predeterminada real probada. No equivale a garantizar ejecución en equipos sin memoria disponible. |
+| PNG con padding o canales RGB invisibles | Recorte persistido; escalado proporcional y remuestreo con alpha premultiplicado. |
+| SVG incompleto o con recursos complejos | Validación compartida entre importación/guardado/exportación. Rechazar funciones no soportadas en vez de omitirlas silenciosamente. |
+| Diseños desaparecidos/corruptos | Copia privada en datos de la app; inspección al guardar/abrir/exportar; un error no reemplaza el trabajo actual. |
+| Resultado asíncrono antiguo | Guardas de diseños/configuración y revisión de trabajo; acciones excluyentes en UI durante operaciones. |
+| Imprimir trabajo incompleto | Aviso de copias imposibles; exportación exige todas las cantidades pedidas y layout vigente. |
+| Sobrescribir datos | PNG con creación exclusiva; JSON con temporal privado y reemplazo atómico, preservando el anterior si falla. |
 
-### v0.1
+## Restricciones
 
-- Estructura del proyecto Tauri + Vite + React.
-- Carga de diseños y copia a `app_data_dir`.
-- Packing básico en Rust para single sheet.
-- Preview básica con Konva.
-- Unit tests de packing en Rust desde el inicio.
-- Unit tests de conversión cm a px con Vitest.
-
-### v0.2
-
-- Multipágina automática.
-- Rotación.
-- Métricas por plancha y globales.
-- Validación de aspect ratio.
-- Tests de integración de Tauri commands.
-- Component tests básicos con React Testing Library.
-
-### v0.3
-
-- Exportación PNG en Rust con crate `image`.
-- E2E de exportación con Playwright + WebDriver.
-
-### v0.4
-
-- Persistencia local con save/load.
-- E2E de guardado y recuperación.
-
-### v1.0
-
-- Cobertura completa en todas las capas.
-- Visual regression estable.
-- Aplicación lista para uso productivo.
-
-## Riesgos técnicos
-
-| Riesgo | Impacto | Mitigación |
-|---|---|---|
-| MaxRects propio puede crecer en complejidad | Packing incorrecto o difícil de mantener | Hacer spike de crates antes de implementar. |
-| Exportación a 300 DPI consume mucha memoria | Fallos con planchas grandes | Mantener exportación en Rust y testear inputs grandes. |
-| SVG sin dimensiones explícitas | Aspect ratio incorrecto | Usar `viewBox` como espacio de rasterización cuando aplique y extraer la proporción final desde límites visibles. |
-| Padding transparente en diseños importados | Tamaño impreso incorrecto o métricas de ocupación infladas | Detectar límites visibles y aplicar dimensiones físicas al arte visible. |
-| Persistencia de objetos `File` del navegador | Estado imposible de serializar | Persistir rutas en `app_data_dir` desde backend Rust. |
-| Cambios visuales en preview | Regresiones difíciles de detectar | Usar snapshots de Playwright y actualizarlos solo cuando el cambio sea deliberado. |
-
-## Restricciones vigentes
-
-- La aplicación es local y single-user.
-- No hay backend remoto ni autenticación.
-- Los formatos iniciales son PNG y SVG.
-- El tamaño máximo recomendado por diseño es 20 MB.
-- La exportación se realiza en Rust, no en Canvas.
-- Las dimensiones físicas en cm son la fuente de verdad.
-- Las dimensiones configuradas se aplican al arte visible; la transparencia no ocupa plancha.
+- Local, single-user, sin autenticación ni servidor remoto.
+- PNG/SVG de entrada; exportación PNG RGBA a 300 DPI en Rust, no Canvas.
+- Centímetros como fuente de verdad. Plancha y celdas solicitadas: enteros positivos configurables; medidas visibles derivadas pueden ser fraccionarias.
+- La celda solicitada es el footprint. El arte visible conserva proporciones dentro; el padding no determina escala.
+- El MVP no controla impresoras/RIP, perfiles de tinta, base blanca, sangrado ni separación automática entre piezas. Sin márgenes: una pieza puede tocar el borde o a otra celda. Configurar diseños/material y RIP de acuerdo con el trabajo real.
+- No se aplica espejo automáticamente. La política de espejo debe decidirse en el RIP para evitar duplicarlo.

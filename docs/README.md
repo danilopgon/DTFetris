@@ -15,13 +15,16 @@ Esta carpeta reemplaza el BRS monolítico por documentos enfocados. Úsala como 
 | Estrategia de testing | [testing-strategy.md](./testing-strategy.md) |
 | Roadmap, riesgos y restricciones | [roadmap-risks.md](./roadmap-risks.md) |
 | Incrementos, dependencias, aceptación y evidencia real | [roadmap.md](./roadmap.md) |
+| Preparar, exportar y comprobar un trabajo real | [manual-dtf-check.md](./manual-dtf-check.md) |
+| Decisión MaxRects y límites operativos | [packing-decision.md](./packing-decision.md) |
+| Evidencia de entrega, decisiones y límites verificados | [final-review.md](./final-review.md) |
 
 ## Estado del producto
 
 | Campo | Valor |
 |---|---|
-| Versión de requisitos | 0.3 |
-| Estado | Draft |
+| Versión de requisitos | MVP 0.1 |
+| Estado | Implementación y verificación en [roadmap.md](./roadmap.md) |
 | Uso previsto | Herramienta personal local, single-user, sin backend remoto |
 | Producto | Aplicación de escritorio para automatizar la composición de planchas DTF |
 

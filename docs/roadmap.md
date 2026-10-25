@@ -11,12 +11,12 @@ Base: `origin/main` (`37ef775`), árbol limpio; rama `feat/autonomous-mvp`.
 | Incremento | Estado | Dependencias | Criterios de aceptación |
 |---|---|---|---|
 | A1. Simplificar proceso | Completado | Inspección inicial | Requisitos útiles conservados en docs; retirar herramientas/archivos exclusivos del proceso anterior; commit independiente. |
-| A2. Base y tamaño inicial | Pendiente | A1 | 60 × 100 cm configurable; redondeo a píxel más cercano probado; invalidación coherente. |
-| B. Packing | Pendiente | A2 | MaxRects Rust determinista, cantidades, multipágina, rotación opcional, imposibles explícitos, sin solapamiento ni desbordes. |
-| C. Flujo UI | Pendiente | B | Generar desde UI; todas las planchas con arte visible proporcional; métricas visibles/globales; carga, errores y layout pendiente. |
-| D. Exportación | Pendiente | B, C | PNG real Rust 300 DPI, transparencia y SVG; todas las planchas; dimensiones, posición y memoria verificadas. |
-| E. Persistencia | Pendiente | A2, C | JSON local versionado; guardar/abrir; archivos ausentes o corruptos sin pérdida del trabajo actual; reexportación verificada. |
-| F. Estabilización | Pendiente | B–E | Tests críticos, lint, builds y E2E disponibles; limitaciones y comprobación manual documentadas; preparar PR final. |
+| A2. Base y tamaño inicial | Verificado | A1 | 60 × 100 cm configurable; redondeo a píxel más cercano probado; invalidación coherente. |
+| B. Packing | Verificado | A2 | MaxRects Rust determinista, cantidades, multipágina, rotación opcional, imposibles explícitos, sin solapamiento ni desbordes. |
+| C. Flujo UI | Verificado en componentes y Chromium con IPC simulado | B | Generar desde UI; todas las planchas con arte visible proporcional; métricas visibles/globales; carga, errores y layout pendiente. |
+| D. Exportación | Verificado con archivos reales | B, C | PNG real Rust 300 DPI, transparencia y SVG; todas las planchas; dimensiones, posición y memoria verificadas. |
+| E. Persistencia | Verificado con archivos e IPC reales | A2, C | JSON local versionado; guardar/abrir; archivos ausentes o corruptos sin pérdida del trabajo actual; reexportación verificada. |
+| F. Estabilización | Automatización y build completos; comprobación nativa manual pendiente | B–E | Tests críticos, lint, builds y E2E disponibles; limitaciones y comprobación manual documentadas; PR final sin merge automático. |
 
 ### Evidencia inicial
 
@@ -26,16 +26,31 @@ Base: `origin/main` (`37ef775`), árbol limpio; rama `feat/autonomous-mvp`.
 - `npm run build`: superó frontend y comenzó compilación Rust; límite de 120 s, resultado completo no verificado.
 - `npm run test:e2e`: falla por `Protocol "tauri:" not supported`. Playwright no controla WebView2 mediante esa URL; requiere runner web con mocks explícitos o pruebas de escritorio separadas.
 
-### Hallazgos conservados y decisiones vigentes
+### Hallazgos iniciales conservados (resueltos durante esta entrega)
 
 - Importación PNG/SVG real con copia privada por UUID y límites alpha `>= 3/255`; errores recuperables. Edición, duplicado por ruta compartida y borrado confirmado cubiertos por tests.
-- Los comandos de packing, exportación y persistencia son placeholders que devolvían éxito sin producir resultados; preview actual dibuja rectángulos, no arte. No son funciones terminadas.
+- Los comandos de packing, exportación y persistencia eran placeholders que devolvían éxito sin producir resultados; el preview solo dibujaba rectángulos. Se han sustituido por implementaciones reales con tests.
 - Celda solicitada en cm enteros = footprint de packing. Arte visible recortado y ajustado proporcionalmente dentro; no reducir footprint por padding ni estirar arte. Esta aclaración posterior prevalece sobre textos antiguos que equiparaban celda con tamaño visible.
-- Validaciones duplicadas en `DesignList`; importación Rust aún acepta decimales; cambios de plancha/importación pueden dejar sheets anteriores. Priorizar estos defectos antes que separar módulos solo por estética.
+- Se centralizó validación de edición/importación y recursos; se rechazaron decimales en Rust y se corrigió invalidación de plancha/importación. La revisión final descubrió también truncamiento por `parseFloat('1e2')`; ahora se convierte la entrada completa y hay test de regresión.
 - El stack instalado ya es Vite 6 (los textos decían Vite 5). Mantener stack, sin migraciones innecesarias.
 - Riesgos: memoria de RGBA a 300 DPI, rutas desaparecidas, límites de SVG, paridad JSON y resultados asíncronos obsoletos. Ver `roadmap-risks.md`.
 - Las únicas skills locales son orientación React/composición; se conservan porque no pertenecen exclusivamente al proceso retirado. No se modifican skills globales del usuario.
 
-## Siguiente paso
+## Evidencia final (2026-10-25)
 
-Implementar A2 y B; conectar el flujo completo sin volver a introducir comandos que simulen éxito.
+- `pnpm install --frozen-lockfile`: correcto; Vite 6.4.3 según lockfile.
+- `npm run test`: **103 tests, 8 archivos**, correctos.
+- `cargo test`: **63 tests**, correctos; incluye 2 pruebas de handlers IPC Tauri reales con runtime simulado, PNG/SVG reales y guardar → recuperar → reexportar idéntico.
+- `npm run lint`, `cargo fmt --check`, `git diff --check`: correctos.
+- `npm run build:frontend`: correcto, también ejecutado por el build Tauri final.
+- `npm run test:e2e`: **2 tests Chromium**, correctos, con IPC/diálogos simulados y snapshot Windows revisado; no acreditan escritorio nativo.
+- `npm run build`: correcto. Generados EXE, MSI y NSIS en `src-tauri/target/release/`. Advertencia preexistente: identificador terminado en `.app`, relevante para macOS (no bloquea Windows).
+- Exportación real 60 × 100: cabecera **7087 × 11811 px**, alpha y lectura de filas, densidad **11811 px/m**; test no simulado.
+- Revisión técnica independiente de fuentes: sin defectos bloqueantes nuevos; el error de notación exponencial detectado quedó corregido y probado.
+- Se lanzó el EXE de producción y se detectó una ventana DTFetris. El intento de inspección nativa no proporcionó una observación fiable: **no** se declara verificado el flujo con diálogos/WebView2 reales. No se requiere ni se incorpora ninguna herramienta externa de automatización al proyecto.
+
+## Siguiente paso exacto
+
+Comprobar el flujo nativo con un diseño real según [manual-dtf-check.md](./manual-dtf-check.md), especialmente selector, carga del arte local en WebView2, guardado y exportación desde los diálogos. Después validar impresión física/RIP al 100%. No hay un bloqueo conocido del motor de composición, pero no confundir pruebas de Chromium con esta comprobación.
+
+Continuación breve: «Lee AGENTS.md y docs/roadmap.md. El backend/IPC, 103 tests frontend, 63 Rust, 2 E2E web y build Windows pasan. Valida el flujo nativo de docs/manual-dtf-check.md sin abrir herramientas externas ni tocar datos reales; corrige solo defectos reproducidos. No reintroduzcas un proceso pesado».
