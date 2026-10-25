@@ -54,6 +54,22 @@ describe('centimeter domain validation', () => {
 })
 
 describe('editable design validation', () => {
+  it.each([undefined, null, '#123456', '#aBcDeF', '#000000', '#FFFFFF'])(
+    'accepts optional or strict RGB override %s',
+    (colorOverride) => {
+      expect(validateEditableDesignInput({ ...baseDesign, colorOverride })).toEqual([])
+    },
+  )
+
+  it.each(['', '#fff', 'red', '#12345678', '123456', ' #123456', '#12GG56', '#123456\n'])(
+    'rejects malformed RGB override %s',
+    (colorOverride) => {
+      expect(validateEditableDesignInput({ ...baseDesign, colorOverride })).toEqual([
+        { code: 'invalid_color_override', field: 'colorOverride', designId: baseDesign.id },
+      ])
+    },
+  )
+
   it('rejects quantity 0 while editing because hiding must be explicit later', () => {
     const errors = validateEditableDesignInput({ ...baseDesign, quantity: 0 })
 
@@ -143,7 +159,9 @@ describe('packing request validation', () => {
       designs: [],
     }
 
-    expect(validatePackingRequest(request)).toEqual([{ code: 'invalid_quantity', field: 'designs' }])
+    expect(validatePackingRequest(request)).toEqual([
+      { code: 'invalid_quantity', field: 'designs' },
+    ])
   })
 })
 
@@ -193,7 +211,14 @@ describe('VisibleBounds contract', () => {
     }
 
     // Verify field names are camelCase (as Rust uses #[serde(rename_all = "camelCase")])
-    expect(Object.keys(bounds)).toEqual(['xPx', 'yPx', 'widthPx', 'heightPx', 'sourceWidthPx', 'sourceHeightPx'])
+    expect(Object.keys(bounds)).toEqual([
+      'xPx',
+      'yPx',
+      'widthPx',
+      'heightPx',
+      'sourceWidthPx',
+      'sourceHeightPx',
+    ])
   })
 })
 

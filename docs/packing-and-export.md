@@ -76,6 +76,8 @@ Una plancha usa exactamente el nombre elegido; varias añaden `-001.png`, `-002.
 
 Memoria: una plancha y un arte por iteración; límite de 100 millones de píxeles/32768 por lado para destino y política acotada compartida para fuentes. Se comprueba disponibilidad al reservar el canvas. Esto no es una garantía ante falta de RAM del sistema: el raster predeterminado requiere unos 335 MB y hay buffers temporales adicionales.
 
+Si existe `colorOverride`, se sustituyen los canales RGB del arte rasterizado por ese color después del remuestreo y antes de componer/rotar; alpha no cambia. Se aplica igual a PNG y SVG, sin editar las fuentes. La sobrescritura representa un color RGB, no una conversión ICC ni una garantía de reproducción física de tinta. El frontend puede usar Canvas únicamente para una miniatura de preview coloreada; la salida de impresión continúa siendo Rust.
+
 ## Razón de no usar Canvas
 
 Canvas del navegador puede quedar limitado por memoria con planchas grandes. Una plancha de 60 × 100 cm a 300 DPI produce 7087 × 11811 píxeles, aproximadamente 335 MB RGBA sin comprimir. Se redondea al píxel entero más cercano; `pHYs` declara 11811 píxeles por metro (300 DPI aproximados por cuantización).

@@ -43,6 +43,41 @@ function makeDesign(overrides: Partial<DesignInput> = {}): DesignInput {
 }
 
 describe('useAppStore sheet configuration', () => {
+  it('preserves color on duplication/restoration and clears independently without changing source metadata', () => {
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    const original = makeDesign()
+    useAppStore.getState().addDesign(original)
+    expect(useAppStore.getState().updateDesign(original.id, { colorOverride: '#A1B2C3' })).toEqual({
+      ok: true,
+    })
+    const duplicate = useAppStore.getState().duplicateDesign(original.id)!
+    expect(duplicate).toMatchObject({
+      imagePath: original.imagePath,
+      colorOverride: '#A1B2C3',
+      visibleBounds: original.visibleBounds,
+    })
+    expect(duplicate.id).not.toBe(original.id)
+    expect(useAppStore.getState().updateDesign(duplicate.id, { colorOverride: null })).toEqual({
+      ok: true,
+    })
+    expect(useAppStore.getState().designs[0].colorOverride).toBe('#A1B2C3')
+    expect(original.colorOverride).toBeUndefined()
+    const designs = useAppStore.getState().designs
+    useAppStore.getState().restoreJob({ version: 1, sheetConfig: DEFAULT_SHEET_CONFIG, designs })
+    expect(useAppStore.getState().designs).toEqual(designs)
+    expect(useAppStore.getState().isLayoutStale).toBe(true)
+  })
+
+  it('rejects invalid color mutations without discarding the current layout', () => {
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    useAppStore.getState().addDesign(makeDesign())
+    useAppStore.getState().setSheets([{ id: 'ready', widthCm: 60, heightCm: 100, placements: [] }])
+    expect(useAppStore.getState().updateDesign('design-1', { colorOverride: '#fff' }).ok).toBe(
+      false,
+    )
+    expect(useAppStore.getState().sheets).toHaveLength(1)
+    expect(useAppStore.getState().designs[0].colorOverride).toBeUndefined()
+  })
   it('invalidates sheets when size changes and ignores invalid dimensions', () => {
     useAppStore.setState(useAppStore.getInitialState(), true)
     useAppStore.getState().setSheets([{ id: 'old', widthCm: 60, heightCm: 100, placements: [] }])

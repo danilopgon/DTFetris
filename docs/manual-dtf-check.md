@@ -9,6 +9,7 @@ En Windows, instalar el MSI/NSIS generado en `src-tauri/target/release/bundle/`,
 1. Importar uno o varios PNG/SVG propios. El original no se modifica: DTFetris crea una copia privada. En SVG, convertir texto a trazados y usar vectores autocontenidos. Límite: 20 MiB y 32 millones de píxeles por diseño.
 2. Introducir la **celda** física en cm enteros. Revisar el tamaño de **arte visible** indicado: una celda 8 × 8 con arte 2:1 imprime arte 8 × 4 centrado, no estirado a 8 × 8.
 3. Editar cantidad, dimensiones y rotación; duplicar si hacen falta variantes. Confirmar antes de eliminar.
+   Si el logo debe ir en otro color, escribir `#RRGGBB` en **Color único** al editar. Sustituye todos los colores de PNG/SVG manteniendo transparencia. **Usar colores originales** quita la sobrescritura sin reimportar. Revisar que el color deseado aparezca tanto en preview como en el PNG; el hexadecimal no sustituye la calibración del RIP/perfil de tinta.
 4. Mantener 60 × 100 cm o cambiar ancho/alto y pulsar **Aplicar tamaño**. Si se necesita separación para cortar, incorporarla deliberadamente en la celda: el MVP no añade márgenes ni sangrado automáticos.
 5. Pulsar **Generar planchas**. Revisar cada hoja, copias, orientación, tamaño visible y métricas. Si alguna copia no cabe, corregir antes de exportar.
 6. **Guardar trabajo** como JSON. No mover ni borrar `design-assets` de los datos locales de DTFetris: el JSON guarda referencias, no incorpora las imágenes. Guardar el JSON por sí solo no sirve como backup portable.

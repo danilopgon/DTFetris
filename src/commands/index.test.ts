@@ -39,6 +39,27 @@ const baseDesignResult: DesignInput = {
 
 describe('export and persistence contracts', () => {
   beforeEach(() => invokeMock.mockReset())
+  it('preserves optional color through save/load and sends it unchanged to Rust export', async () => {
+    const designs = [
+      { ...baseDesignResult, colorOverride: '#Aa1234' },
+      { ...baseDesignResult, id: 'cleared', colorOverride: null },
+      { ...baseDesignResult, id: 'legacy' },
+    ]
+    const job = { version: 1 as const, sheetConfig: { widthCm: 60, heightCm: 100 }, designs }
+    invokeMock
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(job)
+      .mockResolvedValueOnce(['/out/color.png'])
+    await saveJob(job, '/out/job.json')
+    const restored = await loadJob('/out/job.json')
+    await exportPng([], restored.designs, '/out/color.png')
+    expect(restored).toEqual(job)
+    expect(invokeMock).toHaveBeenLastCalledWith('export_png', {
+      sheets: [],
+      designs,
+      outputPath: '/out/color.png',
+    })
+  })
   it('sends assets with sheets and returns actual exported file paths', async () => {
     invokeMock.mockResolvedValueOnce(['/out/plancha.png'])
     await expect(exportPng([], [baseDesignResult], '/out/plancha.png')).resolves.toEqual([

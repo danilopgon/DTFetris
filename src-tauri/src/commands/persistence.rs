@@ -1,5 +1,5 @@
 use crate::domain::assets::inspect_asset;
-use crate::domain::design::DesignInput;
+use crate::domain::design::{parse_color_override, DesignInput};
 use crate::domain::packing::SheetConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -70,6 +70,7 @@ fn validate_job(job: &Job) -> Result<(), String> {
     }
     let mut ids = HashSet::new();
     for design in &job.designs {
+        parse_color_override(design.color_override.as_deref())?;
         if design.id.trim().is_empty()
             || design.name.trim().is_empty()
             || !ids.insert(design.id.trim())
@@ -292,6 +293,80 @@ mod tests {
         };
         save_job(job, f.path("empty.json")).unwrap();
         assert!(load_job(f.path("empty.json")).unwrap().designs.is_empty());
+    }
+
+    #[test]
+    fn overrides_roundtrip_for_png_svg_and_clear_without_modifying_assets() {
+        let f = Fixture::new();
+        let mut job = f.job();
+        let originals: Vec<_> = job
+            .designs
+            .iter()
+            .map(|d| fs::read(&d.image_path).unwrap())
+            .collect();
+        for design in &mut job.designs {
+            design.color_override = Some("#aB09fF".into());
+        }
+        save_job(job.clone(), f.path("colors.json")).unwrap();
+        let mut loaded = load_job(f.path("colors.json")).unwrap();
+        assert_eq!(
+            serde_json::to_value(&loaded).unwrap(),
+            serde_json::to_value(&job).unwrap()
+        );
+        for (design, bytes) in loaded.designs.iter_mut().zip(originals) {
+            assert_eq!(design.color_override.as_deref(), Some("#aB09fF"));
+            assert_eq!(fs::read(&design.image_path).unwrap(), bytes);
+            design.color_override = None;
+        }
+        save_job(loaded, f.path("colors.json")).unwrap();
+        let cleared: serde_json::Value =
+            serde_json::from_slice(&fs::read(f.path("colors.json")).unwrap()).unwrap();
+        assert!(cleared["designs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|d| d.get("colorOverride").is_none()));
+        assert!(load_job(f.path("colors.json"))
+            .unwrap()
+            .designs
+            .iter()
+            .all(|d| d.color_override.is_none()));
+    }
+
+    #[test]
+    fn old_v1_job_without_color_override_loads_and_resaves_without_new_keys() {
+        let f = Fixture::new();
+        let job = f.job();
+        let mut old = serde_json::to_value(&job).unwrap();
+        for design in old["designs"].as_array_mut().unwrap() {
+            design.as_object_mut().unwrap().remove("colorOverride");
+        }
+        fs::write(f.path("old.json"), serde_json::to_vec(&old).unwrap()).unwrap();
+        let loaded = load_job(f.path("old.json")).unwrap();
+        assert!(loaded.designs.iter().all(|d| d.color_override.is_none()));
+        save_job(loaded, f.path("resaved.json")).unwrap();
+        let resaved: serde_json::Value =
+            serde_json::from_slice(&fs::read(f.path("resaved.json")).unwrap()).unwrap();
+        assert_eq!(resaved, old);
+    }
+
+    #[test]
+    fn invalid_color_rejected_on_save_and_load_preserves_previous_job() {
+        let f = Fixture::new();
+        let mut job = f.job();
+        save_job(job.clone(), f.path("job.json")).unwrap();
+        let original = fs::read(f.path("job.json")).unwrap();
+        for invalid in ["", "#123", "#12345678", "#zz0000", " #123456"] {
+            job.designs[0].color_override = Some(invalid.into());
+            assert!(save_job(job.clone(), f.path("job.json"))
+                .unwrap_err()
+                .contains("#RRGGBB"));
+            assert_eq!(fs::read(f.path("job.json")).unwrap(), original);
+            fs::write(f.path("invalid.json"), serde_json::to_vec(&job).unwrap()).unwrap();
+            assert!(load_job(f.path("invalid.json"))
+                .unwrap_err()
+                .contains("#RRGGBB"));
+        }
     }
 
     #[test]

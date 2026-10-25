@@ -163,6 +163,7 @@ pub fn import_design_into(
         original_aspect_ratio,
         quantity: 1,
         can_rotate: true,
+        color_override: None,
     })
 }
 
@@ -581,6 +582,7 @@ mod tests {
             original_aspect_ratio: 1.0,
             quantity: 1,
             can_rotate: true,
+            color_override: None,
         };
 
         let value = serde_json::to_value(&design).expect("serializes");

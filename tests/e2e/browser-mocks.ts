@@ -10,6 +10,8 @@ declare global {
       importError: string | null
       brokenImage: boolean
       loadError: string | null
+      imageDataUrl: string | null
+      imageFormat: 'png' | 'svg'
     }
   }
 }
@@ -24,6 +26,8 @@ export async function installBrowserMocks(page: Page) {
       importError: null,
       brokenImage: false,
       loadError: null,
+      imageDataUrl: null,
+      imageFormat: 'svg',
     }
     window.browserMocks = state
     const svg =
@@ -33,7 +37,7 @@ export async function installBrowserMocks(page: Page) {
         convertFileSrc: () =>
           state.brokenImage
             ? 'data:image/png;base64,broken'
-            : `data:image/svg+xml,${encodeURIComponent(svg)}`,
+            : (state.imageDataUrl ?? `data:image/svg+xml,${encodeURIComponent(svg)}`),
         invoke: async (command: string, args: Record<string, unknown> = {}) => {
           state.calls.push({ command, args: structuredClone(args) })
           if (command === 'plugin:dialog|open') {
@@ -52,14 +56,14 @@ export async function installBrowserMocks(page: Page) {
             if (state.importError) throw state.importError
             return {
               id: 'logo',
-              name: 'logo.svg',
-              imagePath: 'C:/app-data/logo.svg',
+              name: `logo.${state.imageFormat}`,
+              imagePath: `C:/app-data/logo.${state.imageFormat}`,
               widthCm: Number(args.widthCm),
               heightCm: Number(args.heightCm),
               originalAspectRatio: 2,
               quantity: 1,
               canRotate: false,
-              format: 'svg',
+              format: state.imageFormat,
               visibleBounds: {
                 xPx: 0,
                 yPx: 0,

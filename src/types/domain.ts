@@ -46,10 +46,11 @@ export type DesignInput = {
   canRotate: boolean
   format: ImageFormat
   visibleBounds: VisibleBounds
+  colorOverride?: string | null
 }
 
 export type DesignUpdatePatch = Partial<
-  Pick<DesignInput, 'name' | 'widthCm' | 'heightCm' | 'quantity' | 'canRotate'>
+  Pick<DesignInput, 'name' | 'widthCm' | 'heightCm' | 'quantity' | 'canRotate' | 'colorOverride'>
 >
 
 export type Placement = {
@@ -90,7 +91,17 @@ export type PackingResult = {
   unplacedItems: UnplacedItem[]
 }
 
-export type DomainValidationErrorCode = UnplacedReasonCode | 'invalid_quantity' | 'invalid_name'
+export type DomainValidationErrorCode =
+  | UnplacedReasonCode
+  | 'invalid_quantity'
+  | 'invalid_name'
+  | 'invalid_color_override'
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+export function isValidColorOverride(value: unknown): value is string | null | undefined {
+  return value == null || (typeof value === 'string' && value.length === 7 && HEX_COLOR.test(value))
+}
 
 export type DomainValidationError = {
   code: DomainValidationErrorCode
@@ -129,6 +140,10 @@ export function validateEditableDesignInput(design: DesignInput): DomainValidati
 
   if (design.name.trim().length === 0) {
     errors.push({ code: 'invalid_name', field: 'name', designId: design.id })
+  }
+
+  if (!isValidColorOverride(design.colorOverride)) {
+    errors.push({ code: 'invalid_color_override', field: 'colorOverride', designId: design.id })
   }
 
   return errors

@@ -399,6 +399,49 @@ describe('DesignList editing UI', () => {
     render(<DesignList />)
   }
 
+  it('rejects invalid color text in Spanish without mutating the design', async () => {
+    renderWithDesign()
+    await userEvent.click(screen.getByRole('button', { name: 'Editar logo.png' }))
+    await userEvent.type(screen.getByLabelText('Color único (opcional)'), '#fff')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('El color debe tener el formato #RRGGBB')
+    expect(screen.getByLabelText('Color único (opcional)')).toHaveAttribute('aria-invalid', 'true')
+    expect(mockUpdateDesign).not.toHaveBeenCalled()
+  })
+
+  it.each(['png', 'svg'] as const)(
+    'saves a valid color on %s without changing the original',
+    async (format) => {
+      mockUpdateDesign.mockReturnValueOnce({ ok: true })
+      renderWithDesign({ format })
+      await userEvent.click(screen.getByRole('button', { name: 'Editar logo.png' }))
+      await userEvent.type(screen.getByLabelText('Color único (opcional)'), '#aB12ef')
+      await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+      expect(mockUpdateDesign).toHaveBeenCalledWith(
+        sampleDesign.id,
+        expect.objectContaining({ colorOverride: '#aB12ef' }),
+      )
+      expect(mockDesigns[0]).toEqual({ ...sampleDesign, format })
+    },
+  )
+
+  it('explicitly clears a saved override, including invalid draft text', async () => {
+    mockUpdateDesign.mockReturnValueOnce({ ok: true })
+    renderWithDesign({ colorOverride: '#123456' })
+    await userEvent.click(screen.getByRole('button', { name: 'Editar logo.png' }))
+    expect(screen.getByLabelText('Color único (opcional)')).toHaveValue('#123456')
+    await userEvent.type(screen.getByLabelText('Color único (opcional)'), 'oops')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Usar colores originales' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Color único (opcional)')).toHaveValue('')
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    expect(mockUpdateDesign).toHaveBeenCalledWith(
+      sampleDesign.id,
+      expect.objectContaining({ colorOverride: null }),
+    )
+  })
+
   it('edits name, requested cell dimensions, quantity, and rotation with Spanish controls', async () => {
     mockUpdateDesign.mockReturnValueOnce({ ok: true })
     renderWithDesign()

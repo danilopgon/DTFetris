@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::design::{DesignInput, Placement, Sheet};
+use crate::domain::design::{parse_color_override, DesignInput, Placement, Sheet};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -185,6 +185,7 @@ pub fn pack(request: &PackingRequest) -> Result<PackingResult, String> {
     let mut ids = BTreeSet::new();
     let mut count = 0usize;
     for design in &request.designs {
+        parse_color_override(design.color_override.as_deref())?;
         if design.id.trim().is_empty() || !ids.insert(&design.id) {
             return Err("invalid_design_id".into());
         }
@@ -335,6 +336,7 @@ mod tests {
             original_aspect_ratio: 1.5,
             quantity,
             can_rotate: true,
+            color_override: None,
         }
     }
 
@@ -357,6 +359,24 @@ mod tests {
             can_rotate: rotate,
             ..valid_design(quantity)
         }
+    }
+
+    #[test]
+    fn color_override_rejects_invalid_values_and_never_changes_packing_geometry() {
+        let mut input = request(60.0, 100.0, vec![valid_design(3)]);
+        let baseline = serde_json::to_value(pack(&input).unwrap()).unwrap();
+        input.designs[0].color_override = Some("#aB09fF".into());
+        assert_eq!(
+            serde_json::to_value(pack(&input).unwrap()).unwrap(),
+            baseline
+        );
+        input.designs[0].color_override = Some("#bad".into());
+        assert!(pack(&input).unwrap_err().contains("#RRGGBB"));
+        input.designs[0].color_override = None;
+        assert_eq!(
+            serde_json::to_value(pack(&input).unwrap()).unwrap(),
+            baseline
+        );
     }
 
     fn assert_invariants(request: &PackingRequest, result: &PackingResult) {

@@ -41,6 +41,7 @@ mod tests {
                 original_aspect_ratio: 1.5,
                 quantity: 1,
                 can_rotate: true,
+                color_override: None,
             }],
         }
     }

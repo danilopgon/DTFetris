@@ -10,6 +10,7 @@ import type {
 import {
   getFittedVisibleSizeCm,
   isPositiveIntegerCm,
+  isValidColorOverride,
   validateEditableDesignInput,
 } from '../../types/domain'
 import { mapImportErrorToMessage } from '../../utils/importErrors'
@@ -20,6 +21,7 @@ type EditForm = {
   heightCm: string
   quantity: string
   canRotate: boolean
+  colorOverride: string
 }
 
 export default function DesignList() {
@@ -118,6 +120,7 @@ export default function DesignList() {
       heightCm: String(design.heightCm),
       quantity: String(design.quantity),
       canRotate: design.canRotate,
+      colorOverride: design.colorOverride ?? '',
     })
     setEditError(null)
   }
@@ -134,6 +137,8 @@ export default function DesignList() {
 
   function saveEdit(id: string) {
     if (!editForm) return
+    const design = designs.find((d) => d.id === id)
+    if (!design) return
 
     const patch: DesignUpdatePatch = {
       name: editForm.name.trim(),
@@ -141,9 +146,10 @@ export default function DesignList() {
       heightCm: Number(editForm.heightCm),
       quantity: Number(editForm.quantity),
       canRotate: editForm.canRotate,
+      ...(editForm.colorOverride !== '' || design.colorOverride != null
+        ? { colorOverride: editForm.colorOverride === '' ? null : editForm.colorOverride }
+        : {}),
     }
-    const design = designs.find((d) => d.id === id)
-    if (!design) return
     const errors = validateEditableDesignInput({ ...design, ...patch })
     if (errors.length) {
       setEditError(mapDomainErrorToSpanish(errors[0]))
@@ -311,6 +317,37 @@ export default function DesignList() {
                       className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
                     />
                   </div>
+                  <div>
+                    <label htmlFor={`design-edit-color-${d.id}`} className="mb-1 block text-sm">
+                      Color único (opcional)
+                    </label>
+                    <input
+                      id={`design-edit-color-${d.id}`}
+                      type="text"
+                      value={editForm.colorOverride}
+                      onChange={(e) => updateEditForm({ colorOverride: e.target.value })}
+                      placeholder="#RRGGBB"
+                      aria-describedby={`design-color-help-${d.id}`}
+                      aria-invalid={
+                        editError !== null && !isValidColorOverride(editForm.colorOverride || null)
+                      }
+                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                    />
+                    <p id={`design-color-help-${d.id}`} className="mt-1 text-xs text-gray-400">
+                      Formato #RRGGBB. Sustituye todos los colores y conserva la transparencia; no
+                      modifica el archivo original.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateEditForm({ colorOverride: '' })
+                        setEditError(null)
+                      }}
+                      className="mt-1 rounded border border-gray-500 px-2 py-1"
+                    >
+                      Usar colores originales
+                    </button>
+                  </div>
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -358,6 +395,11 @@ export default function DesignList() {
                     {getFittedVisibleSizeCm(d, d.originalAspectRatio).heightCm.toFixed(2)} cm ·{' '}
                     {d.canRotate ? 'rotación permitida' : 'sin rotación'}
                   </p>
+                  {d.colorOverride && (
+                    <p className="text-xs text-gray-300">
+                      Color único: {d.colorOverride.toUpperCase()}
+                    </p>
+                  )}
                   {pendingDeleteId === d.id ? (
                     <div className="space-y-2 rounded border border-red-500/50 p-2">
                       <p>¿Eliminar este diseño?</p>
@@ -419,6 +461,8 @@ export default function DesignList() {
 }
 
 function mapDomainErrorToSpanish(error: DomainValidationError | undefined): string {
+  if (error?.field === 'colorOverride')
+    return 'El color debe tener el formato #RRGGBB (seis dígitos hexadecimales).'
   if (error?.field === 'quantity') return 'La cantidad debe ser al menos 1.'
   if (error?.field === 'name') return 'El nombre es obligatorio.'
   if (error?.field === 'widthCm')

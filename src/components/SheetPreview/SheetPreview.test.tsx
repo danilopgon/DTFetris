@@ -78,10 +78,66 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
 describe('SheetPreview (Konva rendering mocked)', () => {
+  it.each(['png', 'svg'] as const)(
+    'shares a tinted %s source across copies and normalizes crop to its thumbnail dimensions',
+    async (format) => {
+      const context = {
+        drawImage: vi.fn(),
+        fillRect: vi.fn(),
+        fillStyle: '',
+        globalCompositeOperation: '',
+      }
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+        context as unknown as CanvasRenderingContext2D,
+      )
+      useAppStore.setState({
+        designs: [
+          { ...design, format, colorOverride: '#FF0000' },
+          { ...design, id: 'copy', format, colorOverride: '#FF0000' },
+        ],
+        sheets: [
+          {
+            ...sheet,
+            placements: [
+              sheet.placements[0],
+              { ...sheet.placements[0], designId: 'copy', rotated: true },
+            ],
+          },
+        ],
+      })
+      render(<SheetPreview />)
+      Object.defineProperties(pendingImages[0], {
+        naturalWidth: { value: 2000 },
+        naturalHeight: { value: 1000 },
+      })
+      act(() => pendingImages[0].onload?.(new Event('load')))
+      const artworks = await screen.findAllByTestId('artwork')
+      expect(context.drawImage).toHaveBeenCalledTimes(1)
+      expect(artworks[1].parentElement).toHaveAttribute('data-rotation', '90')
+      expect(artworks[1]).toHaveAttribute('data-width', '60')
+      expect(artworks[1]).toHaveAttribute('data-height', '30')
+      expect(JSON.parse(artworks[1].getAttribute('data-crop')!)).toEqual({
+        x: 51.2,
+        y: 25.6,
+        width: 256,
+        height: 128,
+      })
+      act(() => useAppStore.setState({ designs: [{ ...design, format, colorOverride: null }] }))
+      expect(pendingImages).toHaveLength(1)
+      expect(JSON.parse(screen.getByTestId('artwork').getAttribute('data-crop')!)).toEqual({
+        x: 200,
+        y: 100,
+        width: 1000,
+        height: 500,
+      })
+    },
+  )
+
   it('shows configured empty dimensions and the pending composition message', () => {
     render(<SheetPreview />)
     expect(screen.getByTestId('empty-sheet')).toHaveStyle({

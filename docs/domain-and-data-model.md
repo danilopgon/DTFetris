@@ -247,3 +247,9 @@ struct Sheet {
 - Assets: hasta 20 MiB, 32 millones de píxeles y 16384 píxeles por lado. PNG debe ser PNG real; SVG UTF-8 autocontenido, sin texto (convertir a trazados), imágenes anidadas/enlazadas, scripts, contenido HTML o patrones. Se limita también complejidad y memoria de capas/filtros SVG.
 - Exportación: hasta 100 millones de píxeles y 32768 píxeles por lado de raster destino. Estos límites protegen recursos; no fijan medidas de plancha.
 - Cambios de archivos se detectan por formato, geometría y límites visibles. No se mantiene hash: sustituir píxeles preservando exactamente los mismos bounds no se detecta como una edición.
+
+## Color de impresión
+
+`DesignInput.colorOverride` es opcional (`string | null` en TypeScript; `Option<String>` con default en Rust). Ausente/null significa colores originales. Un valor presente debe cumplir `^#[0-9a-fA-F]{6}$`. Se guarda como intención del usuario, sin mutar la imagen ni los límites visibles.
+
+La sobrescritura sustituye R, G y B después del remuestreo y conserva todos los bytes alpha. Ni el packing ni las métricas cambian por el color. La eliminación de la sobrescritura no requiere reimportar el diseño. El modelo JSON sigue en versión 1: el campo opcional no rompe trabajos anteriores y Rust omite valores ausentes al serializar.

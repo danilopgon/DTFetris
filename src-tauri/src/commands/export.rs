@@ -1,5 +1,5 @@
 use crate::domain::assets::{inspect_asset, parse_svg, read_asset, validate_svg_tree_at_scale};
-use crate::domain::design::{DesignInput, ImageFormat, Placement, Sheet};
+use crate::domain::design::{parse_color_override, DesignInput, ImageFormat, Placement, Sheet};
 use image::{imageops, RgbaImage};
 use std::{
     collections::{HashMap, HashSet},
@@ -55,6 +55,7 @@ fn validate(sheets: &[Sheet], designs: &[DesignInput]) -> Result<(), String> {
     }
     let mut by_id = HashMap::new();
     for d in designs {
+        parse_color_override(d.color_override.as_deref())?;
         let b = &d.visible_bounds;
         if d.id.trim().is_empty()
             || by_id.insert(&d.id, d).is_some()
@@ -152,11 +153,12 @@ fn validate(sheets: &[Sheet], designs: &[DesignInput]) -> Result<(), String> {
 }
 
 fn artwork(d: &DesignInput, width: u32, height: u32) -> Result<RgbaImage, String> {
+    let color = parse_color_override(d.color_override.as_deref())?;
     raster_size(width, height)?;
     let path = Path::new(&d.image_path);
     let data = read_asset(path)?;
     let b = &d.visible_bounds;
-    let result = match d.format {
+    let mut result = match d.format {
         ImageFormat::Png => {
             let (source_width, source_height) =
                 image::image_dimensions(path).map_err(|_| "El archivo PNG no es válido.")?;
@@ -254,7 +256,17 @@ fn artwork(d: &DesignInput, width: u32, height: u32) -> Result<RgbaImage, String
     if !result.pixels().any(|p| p[3] >= 3) {
         return Err("El diseño no contiene arte visible.".into());
     }
+    apply_color_override(&mut result, color);
     Ok(result)
+}
+
+/// Recolor straight RGBA only after resampling, preserving every alpha byte.
+fn apply_color_override(image: &mut RgbaImage, color: Option<[u8; 3]>) {
+    if let Some(rgb) = color {
+        for pixel in image.pixels_mut() {
+            pixel.0[..3].copy_from_slice(&rgb);
+        }
+    }
 }
 
 fn composite(canvas: &mut RgbaImage, d: &DesignInput, p: &Placement) -> Result<(), String> {
@@ -443,6 +455,78 @@ mod tests {
 
     fn export(f: &Fixture, s: &[Sheet], d: &[DesignInput]) -> Result<Vec<String>, String> {
         export_png_into(s, d, &f.0.join("output.png"))
+    }
+
+    #[test]
+    fn recolor_preserves_every_alpha_value_and_none_preserves_every_channel() {
+        let original = RgbaImage::from_fn(256, 1, |x, _| Rgba([19, 87, 203, x as u8]));
+        let mut recolored = original.clone();
+        apply_color_override(&mut recolored, Some([171, 9, 255]));
+        for (x, pixel) in recolored.pixels().enumerate() {
+            assert_eq!(pixel.0, [171, 9, 255, x as u8]);
+        }
+        let mut unchanged = original.clone();
+        apply_color_override(&mut unchanged, None);
+        assert_eq!(unchanged, original);
+    }
+
+    #[test]
+    fn png_and_svg_override_export_preserves_alpha_geometry_source_and_can_clear() {
+        for format in [ImageFormat::Png, ImageFormat::Svg] {
+            let f = Fixture::new();
+            let mut d = match format {
+                ImageFormat::Png => f.png(),
+                ImageFormat::Svg => f.svg(),
+            };
+            let original_design = serde_json::to_value(&d).unwrap();
+            let source = fs::read(&d.image_path).unwrap();
+            let s = sheet(&d);
+            let baseline_path = f.0.join("baseline.png");
+            export_png_into(&[s.clone()], &[d.clone()], &baseline_path).unwrap();
+            let baseline = image::open(&baseline_path).unwrap().into_rgba8();
+            let original_art = artwork(&d, 237, 119).unwrap();
+            d.color_override = Some("#aB09fF".into());
+            let art = artwork(&d, 237, 119).unwrap();
+            for (before, after) in original_art.pixels().zip(art.pixels()) {
+                assert_eq!(before[3], after[3]);
+                assert_eq!(&after.0[..3], &[171, 9, 255]);
+            }
+            let output_paths = export(&f, &[s.clone()], &[d.clone()]).unwrap();
+            let output = image::open(&output_paths[0]).unwrap().into_rgba8();
+            assert_eq!(output.dimensions(), baseline.dimensions());
+            for (before, after) in baseline.pixels().zip(output.pixels()) {
+                assert_eq!(before[3], after[3]);
+                if after[3] > 0 {
+                    // Composition uses floating-point alpha math; allow only its
+                    // unavoidable one-byte rounding, never interpolation colors.
+                    for (actual, expected) in after.0[..3].iter().zip([171u8, 9, 255]) {
+                        assert!(actual.abs_diff(expected) <= 1);
+                    }
+                }
+            }
+            assert_eq!(*output.get_pixel(150, 220), Rgba([171, 9, 255, 128]));
+            assert_eq!(fs::read(&d.image_path).unwrap(), source);
+            d.color_override = None;
+            assert_eq!(serde_json::to_value(&d).unwrap(), original_design);
+            assert_eq!(artwork(&d, 237, 119).unwrap(), original_art);
+            let cleared_path = f.0.join("cleared.png");
+            export_png_into(&[s], &[d], &cleared_path).unwrap();
+            assert_eq!(image::open(cleared_path).unwrap().into_rgba8(), baseline);
+        }
+    }
+
+    #[test]
+    fn invalid_override_is_rejected_before_export_and_artwork() {
+        let f = Fixture::new();
+        let mut d = f.png();
+        for invalid in ["", "#123", "#12345678", "#zz0000", " #123456"] {
+            d.color_override = Some(invalid.into());
+            assert!(export(&f, &[sheet(&d)], &[d.clone()])
+                .unwrap_err()
+                .contains("#RRGGBB"));
+            assert!(artwork(&d, 10, 10).is_err());
+        }
+        assert!(!f.0.join("output.png").exists());
     }
 
     #[test]

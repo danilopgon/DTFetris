@@ -3,21 +3,47 @@ import { useEffect, useMemo, useState } from 'react'
 import { Group, Image as KonvaImage, Layer, Rect, Stage } from 'react-konva'
 import { useAppStore } from '../../store/useAppStore'
 import { getFittedVisibleSizeCm } from '../../types/domain'
+import { createTintedPreviewCache, getPreviewSourceSize, type PreviewSource } from './tintedPreview'
 
 export default function SheetPreview() {
   const sheets = useAppStore((s) => s.sheets)
   const designs = useAppStore((s) => s.designs)
   const config = useAppStore((s) => s.sheetConfig)
   const stale = useAppStore((s) => s.isLayoutStale)
+  const jobRevision = useAppStore((s) => s.jobRevision)
   const [images, setImages] = useState<Record<string, HTMLImageElement>>({})
   const [failed, setFailed] = useState<string[]>([])
   const byId = useMemo(() => new Map(designs.map((d) => [d.id, d])), [designs])
+  const pathsKey = JSON.stringify([...new Set(designs.map((d) => d.imagePath))])
+  const [getTintedPreview] = useState(() => createTintedPreviewCache())
+  const previews = useMemo(() => {
+    const byDesign = new Map<string, PreviewSource>()
+    const bySourceColor = new Map<string, PreviewSource>()
+    let failed = false
+    for (const design of designs) {
+      const image = images[design.imagePath]
+      if (!image) continue
+      try {
+        // Deduplicate the entire active job too, even when it exceeds the LRU capacity.
+        const key = JSON.stringify([design.imagePath, design.colorOverride?.toUpperCase()])
+        let source = bySourceColor.get(key)
+        if (!source) {
+          source = getTintedPreview(image, design.colorOverride)
+          bySourceColor.set(key, source)
+        }
+        byDesign.set(design.id, source)
+      } catch {
+        failed = true
+      }
+    }
+    return { byDesign, failed }
+  }, [designs, images, getTintedPreview])
 
   useEffect(() => {
     let cancelled = false
     setImages({})
     setFailed([])
-    const paths = [...new Set(designs.map((d) => d.imagePath))]
+    const paths = JSON.parse(pathsKey) as string[]
     const pending = paths.map((path) => {
       const image = new window.Image()
       image.onload = () => {
@@ -36,7 +62,7 @@ export default function SheetPreview() {
         image.onerror = null
       })
     }
-  }, [designs])
+  }, [pathsKey, jobRevision])
 
   return (
     <section aria-label="Vista previa de las planchas">
@@ -49,6 +75,11 @@ export default function SheetPreview() {
         <p role="alert" className="mb-3 text-sm text-red-300">
           No se pudieron cargar {failed.length} imágenes del trabajo. Comprueba que los archivos
           locales siguen disponibles antes de exportar.
+        </p>
+      )}
+      {previews.failed && (
+        <p role="alert" className="mb-3 text-sm text-red-300">
+          No se pudo mostrar el color del diseño. Vuelve a abrir el trabajo para reintentar.
         </p>
       )}
       {sheets.length === 0 ? (
@@ -88,7 +119,8 @@ export default function SheetPreview() {
                     {sheet.placements.map((placement, i) => {
                       const design = byId.get(placement.designId)
                       if (!design) return null
-                      const image = images[design.imagePath]
+                      const image = previews.byDesign.get(design.id)
+                      const sourceSize = image ? getPreviewSourceSize(image) : null
                       const fitted = getFittedVisibleSizeCm(design, design.originalAspectRatio)
                       const bounds = design.visibleBounds
                       return (
@@ -99,7 +131,7 @@ export default function SheetPreview() {
                             stroke={image ? '#64748b' : '#b91c1c'}
                             strokeWidth={0.5}
                           />
-                          {image && (
+                          {image && sourceSize && (
                             <Group
                               x={placement.rotated ? placement.widthCm * scale : 0}
                               rotation={placement.rotated ? 90 : 0}
@@ -111,12 +143,11 @@ export default function SheetPreview() {
                                 width={fitted.widthCm * scale}
                                 height={fitted.heightCm * scale}
                                 crop={{
-                                  x: (bounds.xPx * image.naturalWidth) / bounds.sourceWidthPx,
-                                  y: (bounds.yPx * image.naturalHeight) / bounds.sourceHeightPx,
-                                  width:
-                                    (bounds.widthPx * image.naturalWidth) / bounds.sourceWidthPx,
+                                  x: (bounds.xPx * sourceSize.width) / bounds.sourceWidthPx,
+                                  y: (bounds.yPx * sourceSize.height) / bounds.sourceHeightPx,
+                                  width: (bounds.widthPx * sourceSize.width) / bounds.sourceWidthPx,
                                   height:
-                                    (bounds.heightPx * image.naturalHeight) / bounds.sourceHeightPx,
+                                    (bounds.heightPx * sourceSize.height) / bounds.sourceHeightPx,
                                 }}
                               />
                             </Group>
