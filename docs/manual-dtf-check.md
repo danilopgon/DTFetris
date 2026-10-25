@@ -7,10 +7,10 @@ En Windows, instalar el MSI/NSIS generado en `src-tauri/target/release/bundle/`,
 ## Preparar y comprobar
 
 1. Importar uno o varios PNG/SVG propios. El original no se modifica: DTFetris crea una copia privada. En SVG, convertir texto a trazados y usar vectores autocontenidos. Límite: 20 MiB y 32 millones de píxeles por diseño.
-2. Introducir la **celda** física en cm enteros. Revisar el tamaño de **arte visible** indicado: una celda 8 × 8 con arte 2:1 imprime arte 8 × 4 centrado, no estirado a 8 × 8.
+2. Introducir las **medidas máximas** en cm enteros. Revisar el **arte visible** indicado: máximos 8 × 8 con arte 2:1 imprimen y reservan 8 × 4 cm, no 8 × 8. El tamaño sobrante no se usa como una celda vacía.
 3. Editar cantidad, dimensiones y rotación; duplicar si hacen falta variantes. Confirmar antes de eliminar.
    Si el logo debe ir en otro color, escribir `#RRGGBB` en **Color único** al editar. Sustituye todos los colores de PNG/SVG manteniendo transparencia. **Usar colores originales** quita la sobrescritura sin reimportar. Revisar que el color deseado aparezca tanto en preview como en el PNG; el hexadecimal no sustituye la calibración del RIP/perfil de tinta.
-4. Mantener 60 × 100 cm o cambiar ancho/alto y pulsar **Aplicar tamaño**. Si se necesita separación para cortar, incorporarla deliberadamente en la celda: el MVP no añade márgenes ni sangrado automáticos.
+4. Mantener 60 × 100 cm o cambiar ancho/alto y separación y pulsar **Aplicar tamaño**. Los nuevos trabajos usan **3 mm entre diseños**, configurable. El MVP no añade margen exterior ni sangrado; no simular separación aumentando los máximos del diseño, porque eso alteraría su escala.
 5. Pulsar **Generar planchas**. Revisar cada hoja, copias, orientación, tamaño visible y métricas. Si alguna copia no cabe, corregir antes de exportar.
 6. **Guardar trabajo** como JSON. No mover ni borrar `design-assets` de los datos locales de DTFetris: el JSON guarda referencias, no incorpora las imágenes. Guardar el JSON por sí solo no sirve como backup portable.
 7. **Exportar PNG · 300 DPI**. Elegir un nombre nuevo. Para varias hojas se crean `nombre-001.png`, `nombre-002.png`, etc. Una exportación fallida no debe mostrar confirmación de éxito.

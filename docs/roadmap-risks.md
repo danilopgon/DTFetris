@@ -18,6 +18,6 @@ La secuencia de entrega y el estado verificable viven únicamente en [roadmap.md
 - Local, single-user, sin autenticación ni servidor remoto.
 - PNG/SVG de entrada; exportación PNG RGBA a 300 DPI en Rust, no Canvas.
 - Centímetros como fuente de verdad. Plancha y celdas solicitadas: enteros positivos configurables; medidas visibles derivadas pueden ser fraccionarias.
-- La celda solicitada es el footprint. El arte visible conserva proporciones dentro; el padding no determina escala.
-- El MVP no controla impresoras/RIP, perfiles de tinta, base blanca, sangrado ni separación automática entre piezas. Sin márgenes: una pieza puede tocar el borde o a otra celda. Configurar diseños/material y RIP de acuerdo con el trabajo real.
+- Las medidas solicitadas son máximos. El footprint es el bbox visible ajustado proporcionalmente; el padding no determina escala.
+- Separación configurable entre piezas (nuevos trabajos: 3 mm). No hay margen exterior automático ni sangrado. El MVP no controla impresoras/RIP, perfiles de tinta o base blanca; configurar material y RIP según el trabajo real.
 - No se aplica espejo automáticamente. La política de espejo debe decidirse en el RIP para evitar duplicarlo.

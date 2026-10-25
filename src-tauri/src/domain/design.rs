@@ -78,10 +78,54 @@ pub struct Placement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Sheet {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gap_cm: Option<f64>,
     pub id: String,
     pub width_cm: f64,
     pub height_cm: f64,
     pub placements: Vec<Placement>,
+}
+
+/// Requested dimensions are a maximum box, never a stretch instruction.
+pub fn fitted_visible_size_cm(design: &DesignInput) -> Result<(f64, f64), String> {
+    let b = &design.visible_bounds;
+    let values = [
+        b.x_px,
+        b.y_px,
+        b.width_px,
+        b.height_px,
+        b.source_width_px,
+        b.source_height_px,
+    ];
+    if !values
+        .iter()
+        .all(|v| v.is_finite() && *v >= 0.0 && v.fract() == 0.0)
+        || b.width_px <= 0.0
+        || b.height_px <= 0.0
+        || b.x_px + b.width_px > b.source_width_px
+        || b.y_px + b.height_px > b.source_height_px
+        || !design.original_aspect_ratio.is_finite()
+        || design.original_aspect_ratio <= 0.0
+        || (design.original_aspect_ratio - b.width_px / b.height_px).abs()
+            > 1e-10 * (b.width_px / b.height_px)
+        || ![design.width_cm, design.height_cm]
+            .iter()
+            .all(|v| v.is_finite() && *v > 0.0 && v.fract() == 0.0 && *v <= u32::MAX as f64)
+    {
+        return Err("Las medidas o metadatos visibles del diseño no son válidos.".into());
+    }
+    let ratio = design.original_aspect_ratio;
+    if design.width_cm / design.height_cm <= ratio {
+        Ok((
+            design.width_cm,
+            (design.width_cm / ratio).min(design.height_cm),
+        ))
+    } else {
+        Ok((
+            (design.height_cm * ratio).min(design.width_cm),
+            design.height_cm,
+        ))
+    }
 }
 
 #[cfg(test)]

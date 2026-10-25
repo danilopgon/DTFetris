@@ -200,7 +200,7 @@ export default function DesignList() {
 
         <div>
           <label htmlFor="design-width-cm" className="mb-1 block text-sm">
-            Ancho (cm)
+            Ancho máximo (cm)
           </label>
           <input
             id="design-width-cm"
@@ -210,13 +210,13 @@ export default function DesignList() {
             value={widthCm}
             onChange={(e) => setWidthCm(e.target.value)}
             placeholder="ej. 10"
-            aria-label="Ancho en centímetros"
+            aria-label="Ancho máximo en centímetros"
             className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm"
           />
         </div>
         <div>
           <label htmlFor="design-height-cm" className="mb-1 block text-sm">
-            Alto (cm)
+            Alto máximo (cm)
           </label>
           <input
             id="design-height-cm"
@@ -226,7 +226,7 @@ export default function DesignList() {
             value={heightCm}
             onChange={(e) => setHeightCm(e.target.value)}
             placeholder="ej. 8"
-            aria-label="Alto en centímetros"
+            aria-label="Alto máximo en centímetros"
             className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm"
           />
         </div>
@@ -241,7 +241,7 @@ export default function DesignList() {
           Importar diseño
         </button>
         <p className="text-xs text-gray-400">
-          Puedes seleccionar varios archivos. La celda indicada se aplica a todos; después puedes
+          Puedes seleccionar varios archivos. Las medidas máximas se aplican a todos; después puedes
           editar cada diseño.
         </p>
         <p className="text-xs text-gray-400">
@@ -277,7 +277,7 @@ export default function DesignList() {
                   </div>
                   <div>
                     <label htmlFor={`design-edit-width-${d.id}`} className="mb-1 block text-sm">
-                      Ancho solicitado (cm)
+                      Ancho máximo (cm)
                     </label>
                     <input
                       id={`design-edit-width-${d.id}`}
@@ -291,7 +291,7 @@ export default function DesignList() {
                   </div>
                   <div>
                     <label htmlFor={`design-edit-height-${d.id}`} className="mb-1 block text-sm">
-                      Alto solicitado (cm)
+                      Alto máximo (cm)
                     </label>
                     <input
                       id={`design-edit-height-${d.id}`}
@@ -357,8 +357,8 @@ export default function DesignList() {
                     Permitir rotación
                   </label>
                   <p className="text-xs text-gray-400">
-                    La celda solicitada define el espacio ocupado; el arte se ajusta
-                    proporcionalmente sin deformarse.
+                    Las medidas máximas limitan el tamaño del arte, que se ajusta proporcionalmente
+                    sin deformarse. Solo su rectángulo visible ocupa espacio en la plancha.
                   </p>
                   {editError && (
                     <p role="alert" className="text-sm text-red-400">
@@ -387,7 +387,7 @@ export default function DesignList() {
               ) : (
                 <div className="space-y-2">
                   <div>
-                    {d.name} ({d.widthCm} × {d.heightCm} cm) ×{d.quantity}
+                    {d.name} (máximo {d.widthCm} × {d.heightCm} cm) ×{d.quantity}
                   </div>
                   <p className="text-xs text-gray-300">
                     Arte visible:{' '}
@@ -465,9 +465,7 @@ function mapDomainErrorToSpanish(error: DomainValidationError | undefined): stri
     return 'El color debe tener el formato #RRGGBB (seis dígitos hexadecimales).'
   if (error?.field === 'quantity') return 'La cantidad debe ser al menos 1.'
   if (error?.field === 'name') return 'El nombre es obligatorio.'
-  if (error?.field === 'widthCm')
-    return 'El ancho solicitado debe ser un número entero mayor que 0.'
-  if (error?.field === 'heightCm')
-    return 'El alto solicitado debe ser un número entero mayor que 0.'
+  if (error?.field === 'widthCm') return 'El ancho máximo debe ser un número entero mayor que 0.'
+  if (error?.field === 'heightCm') return 'El alto máximo debe ser un número entero mayor que 0.'
   return 'No se pudieron guardar los cambios del diseño.'
 }

@@ -68,8 +68,8 @@ export default function SheetPreview() {
     <section aria-label="Vista previa de las planchas">
       <h2 className="mb-2 text-lg font-semibold">Vista previa</h2>
       <p className="mb-4 text-sm text-gray-400">
-        El fondo gris representa transparencia; no se imprime. El borde delimita la celda
-        solicitada.
+        El fondo gris representa transparencia; no se imprime. El borde delimita el tamaño visible
+        colocado. La separación entre diseños no es padding transparente del archivo.
       </p>
       {failed.length > 0 && (
         <p role="alert" className="mb-3 text-sm text-red-300">
@@ -121,7 +121,13 @@ export default function SheetPreview() {
                       if (!design) return null
                       const image = previews.byDesign.get(design.id)
                       const sourceSize = image ? getPreviewSourceSize(image) : null
-                      const fitted = getFittedVisibleSizeCm(design, design.originalAspectRatio)
+                      const fitted = getFittedVisibleSizeCm(
+                        {
+                          widthCm: placement.rotated ? placement.heightCm : placement.widthCm,
+                          heightCm: placement.rotated ? placement.widthCm : placement.heightCm,
+                        },
+                        design.originalAspectRatio,
+                      )
                       const bounds = design.visibleBounds
                       return (
                         <Group key={i} x={placement.xCm * scale} y={placement.yCm * scale}>
@@ -138,8 +144,8 @@ export default function SheetPreview() {
                             >
                               <KonvaImage
                                 image={image}
-                                x={((design.widthCm - fitted.widthCm) / 2) * scale}
-                                y={((design.heightCm - fitted.heightCm) / 2) * scale}
+                                x={0}
+                                y={0}
                                 width={fitted.widthCm * scale}
                                 height={fitted.heightCm * scale}
                                 crop={{

@@ -3,7 +3,7 @@ import type { DesignInput, ImportDesignRequest, VisibleBounds } from '../types/d
 import {
   DEFAULT_SHEET_CONFIG,
   getFittedVisibleSizeCm,
-  getRequestedCellPackingFootprintCm,
+  getVisiblePackingFootprintCm,
 } from '../types/domain'
 import { useAppStore } from './useAppStore'
 
@@ -43,6 +43,42 @@ function makeDesign(overrides: Partial<DesignInput> = {}): DesignInput {
 }
 
 describe('useAppStore sheet configuration', () => {
+  it('preserves the current separation on a size-only change and invalidates on a gap-only change', () => {
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    useAppStore.getState().setSheetSize(40, 80)
+    expect(useAppStore.getState().sheetConfig).toEqual({ widthCm: 40, heightCm: 80, gapCm: 0.3 })
+    useAppStore
+      .getState()
+      .setSheets([{ id: 'ready', widthCm: 40, heightCm: 80, gapCm: 0.3, placements: [] }])
+    useAppStore.getState().setSheetSize(40, 80, 0.125)
+    expect(useAppStore.getState()).toMatchObject({
+      sheetConfig: { gapCm: 0.125 },
+      sheets: [],
+      isLayoutStale: true,
+    })
+    const current = useAppStore.getState()
+    for (const invalid of [-1, NaN, Infinity]) useAppStore.getState().setSheetSize(40, 80, invalid)
+    expect(useAppStore.getState()).toBe(current)
+  })
+
+  it('restores old jobs without inventing a gap and restores explicit gaps unchanged', () => {
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    useAppStore
+      .getState()
+      .restoreJob({ version: 1, sheetConfig: { widthCm: 30, heightCm: 40 }, designs: [] })
+    expect(useAppStore.getState().sheetConfig.gapCm ?? 0).toBe(0)
+    useAppStore.getState().setSheetSize(35, 40)
+    expect(useAppStore.getState().sheetConfig.gapCm).toBeUndefined()
+    useAppStore
+      .getState()
+      .restoreJob({
+        version: 1,
+        sheetConfig: { widthCm: 30, heightCm: 40, gapCm: 0.3 },
+        designs: [],
+      })
+    expect(useAppStore.getState().sheetConfig.gapCm).toBe(0.3)
+  })
+
   it('preserves color on duplication/restoration and clears independently without changing source metadata', () => {
     useAppStore.setState(useAppStore.getInitialState(), true)
     const original = makeDesign()
@@ -85,7 +121,7 @@ describe('useAppStore sheet configuration', () => {
     expect(useAppStore.getState().sheets).toEqual([])
     expect(useAppStore.getState().isLayoutStale).toBe(true)
     useAppStore.getState().setSheetSize(0, 10)
-    expect(useAppStore.getState().sheetConfig).toEqual({ widthCm: 40, heightCm: 80 })
+    expect(useAppStore.getState().sheetConfig).toEqual({ widthCm: 40, heightCm: 80, gapCm: 0.3 })
   })
   it('initializes new work with the default 60 cm x 100 cm sheet configuration', () => {
     useAppStore.setState(useAppStore.getInitialState(), true)
@@ -104,7 +140,7 @@ describe('useAppStore sheet configuration', () => {
 
     const state = useAppStore.getState()
 
-    expect(state.sheetConfig).toEqual({ widthCm: 40, heightCm: 80 })
+    expect(state.sheetConfig).toEqual({ widthCm: 40, heightCm: 80, gapCm: 0.3 })
     expect(state.sheetWidthCm).toBe(40)
     expect(state.sheetHeightCm).toBe(80)
   })
@@ -233,7 +269,7 @@ describe('packing orchestration', () => {
     runPackingMock.mockResolvedValue(result)
     await useAppStore.getState().generateSheets()
     expect(runPackingMock).toHaveBeenCalledWith({
-      sheet: { widthCm: 60, heightCm: 100 },
+      sheet: { widthCm: 60, heightCm: 100, gapCm: 0.3 },
       designs: [makeDesign()],
     })
     expect(useAppStore.getState()).toMatchObject({
@@ -335,7 +371,7 @@ describe('useAppStore design editing actions', () => {
 
     expect(result).toEqual({ ok: true })
     expect(visibleSize).toEqual({ widthCm: 10, heightCm: 7.6 })
-    expect(getRequestedCellPackingFootprintCm(savedDesign)).toEqual({ widthCm: 10, heightCm: 8 })
+    expect(getVisiblePackingFootprintCm(savedDesign)).toEqual({ widthCm: 10, heightCm: 7.6 })
     expect(savedDesign).toMatchObject({ widthCm: 10, heightCm: 8 })
     expect(runPackingMock).not.toHaveBeenCalled()
   })

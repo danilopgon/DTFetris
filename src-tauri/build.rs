@@ -11,5 +11,6 @@ fn main() {
         // tauri-build already embeds a manifest resource for binary targets.
         // Do not generate a second resource with the same ID there.
         println!("cargo:rustc-link-arg-bin=dtf-sheet-optimizer=/MANIFEST:NO");
+        println!("cargo:rustc-link-arg-bin=dtfetris-mcp=/MANIFEST:NO");
     }
 }

@@ -1,6 +1,6 @@
 use crate::domain::assets::inspect_asset;
-use crate::domain::design::{parse_color_override, DesignInput};
-use crate::domain::packing::SheetConfig;
+use crate::domain::design::{fitted_visible_size_cm, parse_color_override, DesignInput};
+use crate::domain::packing::{validate_gap_cm, SheetConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
@@ -61,6 +61,7 @@ fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
 }
 
 fn validate_job(job: &Job) -> Result<(), String> {
+    validate_gap_cm(job.sheet_config.gap_cm)?;
     if job.version != JOB_VERSION {
         return Err("La versión del trabajo no es compatible.".into());
     }
@@ -71,6 +72,7 @@ fn validate_job(job: &Job) -> Result<(), String> {
     let mut ids = HashSet::new();
     for design in &job.designs {
         parse_color_override(design.color_override.as_deref())?;
+        fitted_visible_size_cm(design)?;
         if design.id.trim().is_empty()
             || design.name.trim().is_empty()
             || !ids.insert(design.id.trim())
@@ -232,6 +234,7 @@ mod tests {
             Job {
                 version: JOB_VERSION,
                 sheet_config: SheetConfig {
+                    gap_cm: None,
                     width_cm: 60.0,
                     height_cm: 100.0,
                 },
@@ -286,6 +289,7 @@ mod tests {
         let job = Job {
             version: 1,
             sheet_config: SheetConfig {
+                gap_cm: None,
                 width_cm: 1.0,
                 height_cm: 2.0,
             },
@@ -293,6 +297,33 @@ mod tests {
         };
         save_job(job, f.path("empty.json")).unwrap();
         assert!(load_job(f.path("empty.json")).unwrap().designs.is_empty());
+    }
+
+    #[test]
+    fn configurable_gap_roundtrips_and_legacy_absence_means_zero() {
+        let f = Fixture::new();
+        let mut job = f.job();
+        for gap in [0.0, 0.3, 0.30001] {
+            job.sheet_config.gap_cm = Some(gap);
+            save_job(job.clone(), f.path("gap.json")).unwrap();
+            assert_eq!(
+                load_job(f.path("gap.json")).unwrap().sheet_config.gap_cm,
+                Some(gap)
+            );
+        }
+        for gap in [-0.1, f64::INFINITY, f64::NAN, f64::MAX] {
+            job.sheet_config.gap_cm = Some(gap);
+            assert!(save_job(job.clone(), f.path("gap.json")).is_err());
+        }
+        let mut bad = serde_json::to_value(f.job()).unwrap();
+        bad["sheetConfig"]["gapCm"] = serde_json::json!(-0.3);
+        fs::write(f.path("badgap.json"), serde_json::to_vec(&bad).unwrap()).unwrap();
+        assert!(load_job(f.path("badgap.json")).is_err());
+        job.sheet_config.gap_cm = None;
+        save_job(job, f.path("legacy.json")).unwrap();
+        let loaded = load_job(f.path("legacy.json")).unwrap();
+        assert!(loaded.sheet_config.gap_cm.is_none());
+        assert_eq!(validate_gap_cm(loaded.sheet_config.gap_cm).unwrap(), 0.0);
     }
 
     #[test]
@@ -540,6 +571,7 @@ mod tests {
         let job = Job {
             version: 1,
             sheet_config: SheetConfig {
+                gap_cm: None,
                 width_cm: 60.0,
                 height_cm: 100.0,
             },

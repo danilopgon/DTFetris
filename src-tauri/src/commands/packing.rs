@@ -27,6 +27,7 @@ mod tests {
     fn valid_request() -> PackingRequest {
         PackingRequest {
             sheet: SheetConfig {
+                gap_cm: None,
                 width_cm: 60.0,
                 height_cm: 100.0,
             },
@@ -60,6 +61,7 @@ mod tests {
     fn run_packing_rejects_invalid_request() {
         let request = PackingRequest {
             sheet: SheetConfig {
+                gap_cm: None,
                 width_cm: 0.0,
                 height_cm: 100.0,
             },

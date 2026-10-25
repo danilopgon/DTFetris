@@ -108,6 +108,12 @@ El output siempre es PNG, independientemente del formato de entrada.
 - Permisos de diálogo: abrir, guardar y confirmar. No se añaden servicios externos.
 - Windows/MSVC: el runner unitario que enlaza comandos Tauri necesita manifiesto common-controls v6; `build.rs` lo genera sin duplicar el manifiesto ya incorporado por Tauri para binarios.
 
+## Adaptador de agente externo
+
+El binario independiente `dtfetris-mcp` comunica por stdin/stdout con un cliente MCP. Reutiliza los servicios existentes de importación, packing, persistencia y exportación; solo añade validación de argumentos/rutas y estado de sesión. No necesita crear un `AppHandle`, abrir ventanas ni escuchar en red. Resuelve el directorio de assets con la misma base e identificador de `tauri.conf.json` que Tauri.
+
+La integración entre agente e interfaz se realiza mediante `Job` JSON, no mediante un segundo store sincronizado. La carpeta de ingesta se autoriza al arrancar el servidor y los destinos se restringen al workspace. Los logs no contaminan stdout. Ver [agent-integration.md](./agent-integration.md).
+
 ## Estructura de código relevante
 
 | Ruta | Responsabilidad |

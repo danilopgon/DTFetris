@@ -26,7 +26,7 @@ Cada diseño permitirá configurar:
 - Cantidad mínima `1`.
 - Rotación permitida.
 
-Las dimensiones configuradas representan la celda solicitada por el usuario. Si la relación de esa celda no coincide con la relación del arte visible, el arte se ajusta proporcionalmente dentro de la celda sin deformarse; las dimensiones solicitadas no se reemplazan por el tamaño visible derivado.
+Las dimensiones configuradas son límites máximos del arte visible. El arte se ajusta proporcionalmente sin deformarse; los máximos guardados no se reemplazan por el tamaño visible derivado. Packing reserva ese tamaño visible, no el espacio sobrante de los máximos.
 
 ## RF-003 - Duplicado de diseño
 
@@ -107,10 +107,29 @@ El usuario podrá configurar:
 
 No existirán dimensiones hardcodeadas en el dominio.
 
+La separación entre diseños es configurable en milímetros en la UI y centímetros en el dominio (`gapCm`). Los nuevos trabajos usan 3 mm; JSON anteriores sin campo usan 0. Se garantiza esa separación entre bboxes, sin imponer un margen exterior.
+
 ## RF-014 - Validación de proporciones
 
 El sistema detectará automáticamente la relación de aspecto original de la imagen en el momento de la carga.
 
-La UI indica la celda solicitada y el tamaño visible derivado. Si las proporciones difieren, el arte se centra y ajusta proporcionalmente dentro de la celda; nunca se estira. El MVP no ofrece deformación deliberada (por tanto no requiere confirmación de una operación que no existe).
+La UI indica máximos solicitados y tamaño visible derivado. El arte conserva proporción y se coloca en su bbox visible compacto, nunca estirado ni centrado dentro de una celda sobrante. El MVP no ofrece deformación deliberada.
 
 El aspect ratio original se almacena en el modelo como campo explícito e inmutable y se calcula en el momento de la carga a partir del ancho y alto de los límites visibles detectados. Para SVG, el `viewBox` puede definir el espacio inicial de rasterización, pero la proporción final sale de los límites visibles después de rasterizar y aplicar el umbral alpha.
+
+## RF-015 - Color único por diseño
+
+El usuario puede sobrescribir todos los colores de un diseño PNG/SVG con un único valor hexadecimal `#RRGGBB`, sin distinguir mayúsculas/minúsculas. No se admiten valores abreviados ni un canal alpha en el hexadecimal. La operación conserva exactamente la transparencia del arte; nunca convierte el padding en fondo sólido ni modifica el archivo fuente.
+
+Preview y exportación usan el mismo color. El valor es opcional: al quitarlo se recuperan los colores originales. Duplicar y guardar/recuperar un trabajo conserva el valor. Los trabajos anteriores sin este campo siguen siendo válidos. El cambio se considera una edición y deja la composición pendiente de generar de nuevo.
+
+## RF-016 - Preparación mediante agente externo
+
+Un agente compatible con MCP puede preparar trabajos con lenguaje natural usando herramientas locales de DTFetris. La interpretación del texto y el proveedor/modelo pertenecen al cliente del usuario; DTFetris no integra chat, claves de API ni un modelo.
+
+- Transporte local `stdio`, sin puertos HTTP ni infraestructura remota.
+- Se configuran explícitamente una carpeta de ingesta y una carpeta de trabajo. Listar archivos no los importa ni los ejecuta. Los originales nunca se modifican.
+- El agente puede listar PNG/SVG disponibles, importar con dimensiones físicas explícitas, editar cantidades/rotación/color, duplicar/eliminar, configurar plancha, distribuir y guardar un trabajo revisable.
+- Las rutas de ingesta se restringen al directorio autorizado. No se interpretan nombres de archivo como instrucciones ni se infieren medidas físicas de píxeles o nombres.
+- Exportar exige una invocación explícita con confirmación; no ocurre por detectar un archivo ni por guardar. Sobrescribir un JSON también requiere una autorización explícita por invocación. PNG existentes no se sobrescriben.
+- El trabajo preparado se abre desde la app para revisar. Esta versión no sincroniza en vivo un trabajo ya abierto ni permite que dos procesos lo editen simultáneamente.

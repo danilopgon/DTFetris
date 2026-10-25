@@ -1,5 +1,6 @@
 mod commands;
 mod domain;
+pub mod mcp;
 
 #[cfg(test)]
 mod ipc_tests;

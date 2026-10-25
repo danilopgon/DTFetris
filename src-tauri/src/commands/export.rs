@@ -1,5 +1,8 @@
 use crate::domain::assets::{inspect_asset, parse_svg, read_asset, validate_svg_tree_at_scale};
-use crate::domain::design::{parse_color_override, DesignInput, ImageFormat, Placement, Sheet};
+use crate::domain::design::{
+    fitted_visible_size_cm, parse_color_override, DesignInput, ImageFormat, Placement, Sheet,
+};
+use crate::domain::packing::{validate_gap_cm, CM_QUANTUM};
 use image::{imageops, RgbaImage};
 use std::{
     collections::{HashMap, HashSet},
@@ -92,6 +95,7 @@ fn validate(sheets: &[Sheet], designs: &[DesignInput]) -> Result<(), String> {
         return Err("El trabajo supera el límite de 1000 copias.".into());
     }
     for sheet in sheets {
+        let gap = validate_gap_cm(sheet.gap_cm)?;
         if sheet.id.trim().is_empty()
             || !ids.insert(&sheet.id)
             || !positive_integer(sheet.width_cm)
@@ -105,33 +109,38 @@ fn validate(sheets: &[Sheet], designs: &[DesignInput]) -> Result<(), String> {
             let d = by_id
                 .get(&p.design_id)
                 .ok_or("Una ubicación referencia un diseño inexistente.")?;
+            let (fit_w, fit_h) = fitted_visible_size_cm(d)?;
             let (w, h) = if p.rotated {
-                (d.height_cm, d.width_cm)
+                (fit_h, fit_w)
             } else {
-                (d.width_cm, d.height_cm)
+                (fit_w, fit_h)
             };
             if ![p.x_cm, p.y_cm]
                 .into_iter()
                 .all(|v| v.is_finite() && v >= 0.0)
                 || !p.width_cm.is_finite()
                 || !p.height_cm.is_finite()
-                || (p.width_cm - w).abs() > EPSILON
-                || (p.height_cm - h).abs() > EPSILON
+                || p.width_cm < w - EPSILON
+                || p.width_cm > w + CM_QUANTUM + EPSILON
+                || p.height_cm < h - EPSILON
+                || p.height_cm > h + CM_QUANTUM + EPSILON
                 || (p.rotated && !d.can_rotate)
-                || p.x_cm + w > sheet.width_cm + EPSILON
-                || p.y_cm + h > sheet.height_cm + EPSILON
+                || p.x_cm + p.width_cm > sheet.width_cm + EPSILON
+                || p.y_cm + p.height_cm > sheet.height_cm + EPSILON
             {
                 return Err(
                     "Una ubicación tiene dimensiones, rotación o límites inválidos.".into(),
                 );
             }
             for other in &sheet.placements[..index] {
-                if p.x_cm < other.x_cm + other.width_cm - EPSILON
-                    && other.x_cm < p.x_cm + w - EPSILON
-                    && p.y_cm < other.y_cm + other.height_cm - EPSILON
-                    && other.y_cm < p.y_cm + h - EPSILON
+                if p.x_cm < other.x_cm + other.width_cm + gap - EPSILON
+                    && other.x_cm < p.x_cm + p.width_cm + gap - EPSILON
+                    && p.y_cm < other.y_cm + other.height_cm + gap - EPSILON
+                    && other.y_cm < p.y_cm + p.height_cm + gap - EPSILON
                 {
-                    return Err("Las ubicaciones se solapan.".into());
+                    return Err(
+                        "Las ubicaciones se solapan o no respetan la separación mínima.".into(),
+                    );
                 }
             }
             let count = counts.entry(&p.design_id).or_default();
@@ -270,10 +279,7 @@ fn apply_color_override(image: &mut RgbaImage, color: Option<[u8; 3]>) {
 }
 
 fn composite(canvas: &mut RgbaImage, d: &DesignInput, p: &Placement) -> Result<(), String> {
-    let b = &d.visible_bounds;
-    let scale = (d.width_cm / b.width_px).min(d.height_cm / b.height_px);
-    let w_cm = b.width_px * scale;
-    let h_cm = b.height_px * scale;
+    let (w_cm, h_cm) = fitted_visible_size_cm(d)?;
     let image = artwork(d, cm_px(w_cm).max(1), cm_px(h_cm).max(1))?;
     let (image, w_cm, h_cm) = if p.rotated {
         (imageops::rotate90(&image), h_cm, w_cm)
@@ -438,7 +444,9 @@ mod tests {
     }
 
     fn sheet(d: &DesignInput) -> Sheet {
+        let (width_cm, height_cm) = fitted_visible_size_cm(d).unwrap();
         Sheet {
+            gap_cm: None,
             id: "sheet-1".into(),
             width_cm: 4.0,
             height_cm: 4.0,
@@ -446,8 +454,8 @@ mod tests {
                 design_id: d.id.clone(),
                 x_cm: 1.0,
                 y_cm: 1.0,
-                width_cm: 2.0,
-                height_cm: 2.0,
+                width_cm,
+                height_cm,
                 rotated: false,
             }],
         }
@@ -468,6 +476,67 @@ mod tests {
         let mut unchanged = original.clone();
         apply_color_override(&mut unchanged, None);
         assert_eq!(unchanged, original);
+    }
+
+    #[test]
+    fn fractional_svg_fit_exports_without_requested_box_padding_and_validates_gap() {
+        let f = Fixture::new();
+        let source = f.0.join("narrow.svg");
+        fs::write(&source, r#"<svg xmlns="http://www.w3.org/2000/svg" width="570" height="91"><rect width="570" height="91" fill="red" fill-opacity="0.5"/></svg>"#).unwrap();
+        let mut d = import_design_into(&f.0, source.to_str().unwrap(), 9.0, 8.0).unwrap();
+        d.quantity = 2;
+        d.color_override = Some("#123456".into());
+        let packed = crate::domain::packing::pack(&crate::domain::packing::PackingRequest {
+            sheet: crate::domain::packing::SheetConfig {
+                width_cm: 9.0,
+                height_cm: 4.0,
+                gap_cm: Some(0.3),
+            },
+            designs: vec![d.clone()],
+        })
+        .unwrap();
+        assert_eq!(packed.sheets.len(), 1);
+        let p = &packed.sheets[0].placements[0];
+        assert_eq!((p.width_cm, p.height_cm), (9.0, 1.4369));
+        let paths = export(&f, &packed.sheets, &[d.clone()]).unwrap();
+        let output = image::open(&paths[0]).unwrap().into_rgba8();
+        assert_eq!(output.dimensions(), (cm_px(9.0), cm_px(4.0)));
+        assert_eq!(*output.get_pixel(20, 20), Rgba([18, 52, 86, 128]));
+        assert_eq!(output.get_pixel(20, cm_px(1.55))[3], 0);
+        assert_eq!(output.get_pixel(20, cm_px(2.0))[3], 128);
+        let mut invalid = packed.sheets.clone();
+        invalid[0].placements[1].y_cm = p.height_cm + 0.2;
+        assert!(validate(&invalid, &[d.clone()]).is_err());
+        invalid = packed.sheets.clone();
+        invalid[0].placements[0].height_cm = 8.0;
+        assert!(validate(&invalid, &[d.clone()]).is_err());
+        invalid = packed.sheets.clone();
+        invalid[0].placements[0].height_cm -= CM_QUANTUM;
+        assert!(validate(&invalid, &[d]).is_err());
+    }
+
+    #[test]
+    fn fractional_intrinsic_svg_exports_using_normalized_bounds_at_fractional_cm_size() {
+        let f = Fixture::new();
+        let source = f.0.join("fractional.svg");
+        fs::write(&source, r#"<svg xmlns="http://www.w3.org/2000/svg" width="12.5" height="7.5"><rect width="12.5" height="7.5" fill="blue"/></svg>"#).unwrap();
+        let d = import_design_into(&f.0, source.to_str().unwrap(), 3.0, 3.0).unwrap();
+        let packed = crate::domain::packing::pack(&crate::domain::packing::PackingRequest {
+            sheet: crate::domain::packing::SheetConfig {
+                width_cm: 3.0,
+                height_cm: 2.0,
+                gap_cm: Some(0.3),
+            },
+            designs: vec![d.clone()],
+        })
+        .unwrap();
+        assert!(packed.unplaced_items.is_empty());
+        let p = &packed.sheets[0].placements[0];
+        assert_eq!((p.width_cm, p.height_cm), (3.0, 1.8462));
+        let paths = export(&f, &packed.sheets, &[d]).unwrap();
+        let output = image::open(&paths[0]).unwrap().into_rgba8();
+        assert_eq!(*output.get_pixel(20, 20), Rgba([0, 0, 255, 255]));
+        assert_eq!(output.get_pixel(20, cm_px(1.95))[3], 0);
     }
 
     #[test]
@@ -537,10 +606,10 @@ mod tests {
         let output = image::open(&paths[0]).unwrap().into_rgba8();
         assert_eq!(output.dimensions(), (472, 472));
         assert_eq!(output.get_pixel(0, 0)[3], 0);
-        assert_eq!(output.get_pixel(150, 150)[3], 0); // centered 2:1 art in 2×2 cell
-        assert_eq!(*output.get_pixel(150, 220), Rgba([255, 0, 0, 128]));
-        assert_eq!(*output.get_pixel(320, 220), Rgba([0, 0, 255, 255]));
-        assert_eq!(output.get_pixel(370, 220)[3], 0);
+        assert_eq!(*output.get_pixel(150, 150), Rgba([255, 0, 0, 128]));
+        assert_eq!(*output.get_pixel(320, 150), Rgba([0, 0, 255, 255]));
+        assert_eq!(output.get_pixel(150, 250)[3], 0); // no unused requested-cell padding
+        assert_eq!(output.get_pixel(370, 150)[3], 0);
         let decoder =
             png::Decoder::new(std::io::BufReader::new(fs::File::open(&paths[0]).unwrap()));
         let reader = decoder.read_info().unwrap();
@@ -557,11 +626,13 @@ mod tests {
         let d = f.png();
         let mut s = sheet(&d);
         s.placements[0].rotated = true;
+        s.placements[0].width_cm = 1.0;
+        s.placements[0].height_cm = 2.0;
         let paths = export(&f, &[s], &[d]).unwrap();
         let output = image::open(&paths[0]).unwrap().into_rgba8();
-        assert_eq!(*output.get_pixel(220, 150), Rgba([255, 0, 0, 128]));
-        assert_eq!(*output.get_pixel(220, 320), Rgba([0, 0, 255, 255]));
-        assert_eq!(output.get_pixel(150, 220)[3], 0);
+        assert_eq!(*output.get_pixel(150, 150), Rgba([255, 0, 0, 128]));
+        assert_eq!(*output.get_pixel(150, 320), Rgba([0, 0, 255, 255]));
+        assert_eq!(output.get_pixel(250, 220)[3], 0);
     }
 
     #[test]
@@ -572,13 +643,12 @@ mod tests {
         d.height_cm = 1.0;
         let mut s = sheet(&d);
         s.placements[0].width_cm = 1.0;
-        s.placements[0].height_cm = 3.0;
+        s.placements[0].height_cm = 2.0;
         s.placements[0].rotated = true;
         let paths = export(&f, &[s], &[d]).unwrap();
         let output = image::open(&paths[0]).unwrap().into_rgba8();
-        assert_eq!(output.get_pixel(160, 140)[3], 0);
-        assert_eq!(*output.get_pixel(160, 200), Rgba([255, 0, 0, 128]));
-        assert_eq!(*output.get_pixel(160, 380), Rgba([0, 0, 255, 255]));
+        assert_eq!(*output.get_pixel(160, 140), Rgba([255, 0, 0, 128]));
+        assert_eq!(*output.get_pixel(160, 320), Rgba([0, 0, 255, 255]));
         assert_eq!(output.get_pixel(160, 440)[3], 0);
     }
 
@@ -591,7 +661,7 @@ mod tests {
         let p = output.get_pixel(150, 220);
         assert_eq!(p[0], 255);
         assert!((127..=128).contains(&p[3]));
-        assert_eq!(output.get_pixel(150, 150)[3], 0);
+        assert!((127..=128).contains(&output.get_pixel(150, 150)[3]));
         // Direct vector rasterization has no import-resolution interpolation blur.
         assert_eq!(output.get_pixel(cm_px(1.0), 220)[0], 255);
     }

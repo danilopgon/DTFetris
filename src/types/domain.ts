@@ -28,11 +28,13 @@ export type ImportDesignErrorCode =
 export type SheetConfig = {
   widthCm: Cm
   heightCm: Cm
+  gapCm?: number
 }
 
 export const DEFAULT_SHEET_CONFIG: SheetConfig = {
   widthCm: 60,
   heightCm: 100,
+  gapCm: 0.3,
 }
 
 export type DesignInput = {
@@ -66,6 +68,7 @@ export type Sheet = {
   id: string
   widthCm: Cm
   heightCm: Cm
+  gapCm?: number
   placements: Placement[]
 }
 
@@ -113,6 +116,10 @@ export function isPositiveIntegerCm(value: number): value is Cm {
   return Number.isFinite(value) && Number.isInteger(value) && value > 0 && value <= 4_294_967_295
 }
 
+export function isValidGapCm(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 4_294_967_295
+}
+
 function isEditableQuantity(value: number): boolean {
   return Number.isInteger(value) && value >= 1
 }
@@ -150,31 +157,28 @@ export function validateEditableDesignInput(design: DesignInput): DomainValidati
 }
 
 export function getFittedVisibleSizeCm(
-  requestedCell: Pick<DesignInput, 'widthCm' | 'heightCm'>,
+  maximumSize: Pick<DesignInput, 'widthCm' | 'heightCm'>,
   artworkAspectRatio: number,
 ): Pick<DesignInput, 'widthCm' | 'heightCm'> {
-  const cellRatio = requestedCell.widthCm / requestedCell.heightCm
+  const maximumRatio = maximumSize.widthCm / maximumSize.heightCm
 
-  if (artworkAspectRatio > cellRatio) {
+  if (artworkAspectRatio > maximumRatio) {
     return {
-      widthCm: requestedCell.widthCm,
-      heightCm: requestedCell.widthCm / artworkAspectRatio,
+      widthCm: maximumSize.widthCm,
+      heightCm: maximumSize.widthCm / artworkAspectRatio,
     }
   }
 
   return {
-    widthCm: requestedCell.heightCm * artworkAspectRatio,
-    heightCm: requestedCell.heightCm,
+    widthCm: maximumSize.heightCm * artworkAspectRatio,
+    heightCm: maximumSize.heightCm,
   }
 }
 
-export function getRequestedCellPackingFootprintCm(
-  requestedCell: Pick<DesignInput, 'widthCm' | 'heightCm'>,
+export function getVisiblePackingFootprintCm(
+  design: Pick<DesignInput, 'widthCm' | 'heightCm' | 'originalAspectRatio'>,
 ): Pick<DesignInput, 'widthCm' | 'heightCm'> {
-  return {
-    widthCm: requestedCell.widthCm,
-    heightCm: requestedCell.heightCm,
-  }
+  return getFittedVisibleSizeCm(design, design.originalAspectRatio)
 }
 
 export function validatePackingRequest(request: PackingRequest): DomainValidationError[] {
@@ -186,6 +190,10 @@ export function validatePackingRequest(request: PackingRequest): DomainValidatio
 
   if (!isPositiveIntegerCm(request.sheet.heightCm)) {
     errors.push({ code: 'invalid_dimensions', field: 'sheet.heightCm' })
+  }
+
+  if (!isValidGapCm(request.sheet.gapCm ?? 0)) {
+    errors.push({ code: 'invalid_dimensions', field: 'sheet.gapCm' })
   }
 
   for (const design of request.designs) {

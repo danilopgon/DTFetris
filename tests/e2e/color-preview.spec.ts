@@ -40,10 +40,10 @@ for (const format of ['png', 'svg'] as const) {
         .first()
         .evaluate((canvas: HTMLCanvasElement) => {
           const ctx = canvas.getContext('2d')!
-          // Cell 60x100 cm at 6 px/cm: fitted artwork 360x180, centered vertically.
+          // Maximum 60x100 cm -> visible bbox 60x30 cm at the placement origin.
           const ratio = canvas.width / 360
           return [45, 135, 225, 315].map((x) =>
-            Array.from(ctx.getImageData(Math.round(x * ratio), Math.round(300 * ratio), 1, 1).data),
+            Array.from(ctx.getImageData(Math.round(x * ratio), Math.round(90 * ratio), 1, 1).data),
           )
         })
     await edit.click()

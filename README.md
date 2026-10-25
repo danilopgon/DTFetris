@@ -46,9 +46,15 @@ pnpm dev
 4. Revisar todas las hojas y el aprovechamiento. Corregir cualquier copia que no quepa.
 5. Exportar PNG a **300 DPI** y guardar el trabajo como JSON para recuperarlo después.
 
-El arte conserva proporciones dentro de la celda. A tamaño inicial, la salida es **7087 × 11811 píxeles**, con transparencia. Varias planchas reciben sufijos `-001`, `-002`, etc.; no se sobrescriben PNG existentes.
+Las medidas de diseño son máximos: el arte conserva proporción y packing reserva su tamaño visible, sin la celda sobrante. Separación configurable, inicialmente **3 mm**. A tamaño inicial, la salida es **7087 × 11811 píxeles**, con transparencia. Varias planchas reciben sufijos `-001`, `-002`, etc.; no se sobrescriben PNG existentes.
 
 Los diseños se copian a los datos privados de la aplicación. Conservar esa carpeta junto con el JSON: el trabajo no incorpora las imágenes ni es un paquete portable. Los SVG deben convertir texto a trazados; ver límites y comprobación de impresión en [la guía de trabajo real](docs/manual-dtf-check.md).
+
+Al editar un diseño se puede aplicar un **color único `#RRGGBB`** a PNG/SVG, conservando transparencia, o volver a los colores originales. El color se conserva al duplicar y guardar el trabajo.
+
+### Preparar trabajos con tu agente
+
+`npm run build:mcp` genera `src-tauri/target/release/dtfetris-mcp.exe`: servidor MCP local para un cliente/agente externo, con carpeta de ingesta y workspace explícitos. Permite preparar medidas, cantidades, colores y composiciones con lenguaje natural y abrir el JSON resultante en DTFetris para revisión. No incorpora chat ni credenciales. Configuración y límites en [agent-integration.md](docs/agent-integration.md).
 
 ### Producción en Windows
 

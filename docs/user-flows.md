@@ -29,7 +29,8 @@ Errores posibles y mensajes en español:
 ```text
 Usuario configura diseños y pulsa "Generar"
   -> invoke('run_packing', { request: { designs, sheet: sheetConfig } })
-  -> Rust ejecuta MaxRects en centímetros sobre la celda solicitada de cada copia
+  -> Rust ajusta proporcionalmente el arte dentro de los máximos solicitados
+  -> MaxRects reserva el bbox visible ajustado y la separación configurada (nuevos trabajos: 3 mm)
   -> Rust devuelve PackingResult { sheets, unplacedItems }
   -> Si hay copias que no caben, UI muestra nombres y bloquea exportación; no se omiten en silencio
 ```

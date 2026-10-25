@@ -5,6 +5,7 @@ import {
   validateEditableDesignInput,
   validatePackingRequest,
   isPositiveIntegerCm,
+  isValidGapCm,
   type DesignInput,
   type DesignUpdatePatch,
   type DomainValidationError,
@@ -34,7 +35,7 @@ type AppState = {
   removeDesign: (id: string) => void
   importDesign: (request: ImportDesignRequest) => Promise<DesignInput>
   setSheets: (sheets: Sheet[]) => void
-  setSheetSize: (widthCm: number, heightCm: number) => void
+  setSheetSize: (widthCm: number, heightCm: number, gapCm?: number) => void
   setOptimizing: (value: boolean) => void
   generateSheets: () => Promise<void>
   restoreJob: (job: Job) => void
@@ -112,12 +113,23 @@ export const useAppStore = create<AppState>((set) => ({
     }
   },
   setSheets: (sheets) => set({ sheets, unplacedItems: [], isLayoutStale: false }),
-  setSheetSize: (widthCm, heightCm) => {
+  setSheetSize: (widthCm, heightCm, gapCm) => {
     if (!isPositiveIntegerCm(widthCm) || !isPositiveIntegerCm(heightCm)) return
     const current = useAppStore.getState().sheetConfig
-    if (current.widthCm === widthCm && current.heightCm === heightCm) return
+    const nextGap = gapCm ?? current.gapCm ?? 0
+    if (!isValidGapCm(nextGap)) return
+    if (
+      current.widthCm === widthCm &&
+      current.heightCm === heightCm &&
+      (current.gapCm ?? 0) === nextGap
+    )
+      return
     set({
-      sheetConfig: { widthCm, heightCm },
+      sheetConfig: {
+        widthCm,
+        heightCm,
+        ...(gapCm !== undefined || current.gapCm !== undefined ? { gapCm: nextGap } : {}),
+      },
       sheetWidthCm: widthCm,
       sheetHeightCm: heightCm,
       ...pendingLayout,
@@ -129,7 +141,9 @@ export const useAppStore = create<AppState>((set) => ({
     if (isOptimizing) return
     const request = { sheet: sheetConfig, designs }
     if (validatePackingRequest(request).length)
-      throw new Error('Revisa las dimensiones y cantidades; importa al menos un diseño.')
+      throw new Error(
+        'Revisa las dimensiones, la separación y las cantidades; importa al menos un diseño.',
+      )
     set({ isOptimizing: true })
     try {
       const result = await runPacking(request)

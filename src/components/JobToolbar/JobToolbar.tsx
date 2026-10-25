@@ -2,9 +2,13 @@ import { confirm, open, save } from '@tauri-apps/plugin-dialog'
 import { useEffect, useState } from 'react'
 import { exportPng, loadJob, saveJob } from '../../commands'
 import { useAppStore } from '../../store/useAppStore'
-import { isPositiveIntegerCm } from '../../types/domain'
+import { isPositiveIntegerCm, isValidGapCm } from '../../types/domain'
 
 type Props = { onBusyChange: (busy: boolean) => void }
+
+function gapInMm(gapCm = 0): string {
+  return String(Number((gapCm * 10).toPrecision(15)))
+}
 
 export default function JobToolbar({ onBusyChange }: Props) {
   const config = useAppStore((s) => s.sheetConfig)
@@ -20,14 +24,21 @@ export default function JobToolbar({ onBusyChange }: Props) {
   const [path, setPath] = useState('')
   const [sheetWidth, setSheetWidth] = useState(String(config.widthCm))
   const [sheetHeight, setSheetHeight] = useState(String(config.heightCm))
+  const [sheetGapMm, setSheetGapMm] = useState(gapInMm(config.gapCm))
   const pendingSize =
-    sheetWidth !== String(config.widthCm) || sheetHeight !== String(config.heightCm)
+    sheetWidth !== String(config.widthCm) ||
+    sheetHeight !== String(config.heightCm) ||
+    sheetGapMm !== gapInMm(config.gapCm)
   const validSize =
-    isPositiveIntegerCm(Number(sheetWidth)) && isPositiveIntegerCm(Number(sheetHeight))
+    isPositiveIntegerCm(Number(sheetWidth)) &&
+    isPositiveIntegerCm(Number(sheetHeight)) &&
+    sheetGapMm.trim() !== '' &&
+    isValidGapCm(Number(sheetGapMm) / 10)
   useEffect(() => {
     setSheetWidth(String(config.widthCm))
     setSheetHeight(String(config.heightCm))
-  }, [config.widthCm, config.heightCm])
+    setSheetGapMm(gapInMm(config.gapCm))
+  }, [config.widthCm, config.heightCm, config.gapCm])
 
   async function perform(action: () => Promise<void>) {
     setBusy(true)
@@ -142,15 +153,31 @@ export default function JobToolbar({ onBusyChange }: Props) {
             onChange={(e) => setSheetHeight(e.target.value)}
           />
         </label>
+        <label className="text-sm">
+          Separación entre diseños (mm)
+          <input
+            className="number-input"
+            type="number"
+            min="0"
+            step="any"
+            value={sheetGapMm}
+            onChange={(e) => setSheetGapMm(e.target.value)}
+          />
+        </label>
         <button
           className="action-secondary"
           disabled={!pendingSize || !validSize}
           onClick={() => {
-            useAppStore.getState().setSheetSize(Number(sheetWidth), Number(sheetHeight))
-            setMessage('Tamaño actualizado. Genera de nuevo las planchas.')
+            useAppStore
+              .getState()
+              .setSheetSize(Number(sheetWidth), Number(sheetHeight), Number(sheetGapMm) / 10)
+            setSheetWidth(String(Number(sheetWidth)))
+            setSheetHeight(String(Number(sheetHeight)))
+            setSheetGapMm(gapInMm(Number(sheetGapMm) / 10))
+            setMessage('Configuración actualizada. Genera de nuevo las planchas.')
           }}
         >
-          Aplicar tamaño
+          Aplicar configuración
         </button>
         <button
           className="action-primary"
@@ -168,8 +195,8 @@ export default function JobToolbar({ onBusyChange }: Props) {
       {pendingSize && (
         <p role="status" className="mt-2 text-sm text-amber-200">
           {validSize
-            ? 'Aplica el tamaño antes de generar, guardar o exportar.'
-            : 'Las dimensiones de plancha deben ser centímetros enteros mayores que cero.'}
+            ? 'Aplica la configuración antes de generar, guardar o exportar.'
+            : 'La plancha requiere centímetros enteros mayores que cero y separación finita mayor o igual que cero.'}
         </p>
       )}
       {path && <p className="mt-2 break-all text-xs text-gray-400">Trabajo: {path}</p>}
@@ -192,7 +219,7 @@ export default function JobToolbar({ onBusyChange }: Props) {
         <div role="alert" className="mt-3 text-sm text-amber-200">
           <p>
             No se pueden exportar todas las copias: {unplaced.length} no caben. Amplía la plancha,
-            reduce su celda o permite rotación y vuelve a generar.
+            reduce sus medidas máximas o la separación, o permite rotación y vuelve a generar.
           </p>
           <ul>
             {[...new Set(unplaced.map((item) => item.designId))].map((id) => (

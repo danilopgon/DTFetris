@@ -157,8 +157,8 @@ describe('DesignList import UI', () => {
     render(<DesignList />)
     openMock.mockResolvedValueOnce(['/designs/one.png', '/designs/bad.svg'])
     await userEvent.click(screen.getByRole('button', { name: /seleccionar archivo/i }))
-    await userEvent.type(screen.getByLabelText('Ancho en centímetros'), '10')
-    await userEvent.type(screen.getByLabelText('Alto en centímetros'), '8')
+    await userEvent.type(screen.getByLabelText('Ancho máximo en centímetros'), '10')
+    await userEvent.type(screen.getByLabelText('Alto máximo en centímetros'), '8')
     mockImportDesign.mockResolvedValueOnce(sampleDesign).mockRejectedValueOnce('empty_artwork')
     await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
     await waitFor(() => expect(mockImportDesign).toHaveBeenCalledTimes(2))
@@ -176,8 +176,8 @@ describe('DesignList import UI', () => {
   it('converts the entire numeric input instead of truncating exponent notation', async () => {
     render(<DesignList />)
     await selectFile()
-    await userEvent.type(screen.getByLabelText('Ancho en centímetros'), '1e2')
-    await userEvent.type(screen.getByLabelText('Alto en centímetros'), '10')
+    await userEvent.type(screen.getByLabelText('Ancho máximo en centímetros'), '1e2')
+    await userEvent.type(screen.getByLabelText('Alto máximo en centímetros'), '10')
     mockImportDesign.mockResolvedValueOnce(sampleDesign)
     await userEvent.click(screen.getByRole('button', { name: /importar diseño/i }))
     await waitFor(() =>
@@ -449,15 +449,15 @@ describe('DesignList editing UI', () => {
     await userEvent.click(screen.getByRole('button', { name: /editar logo\.png/i }))
     await userEvent.clear(screen.getByLabelText('Nombre'))
     await userEvent.type(screen.getByLabelText('Nombre'), 'Logo principal')
-    await userEvent.clear(screen.getByLabelText('Ancho solicitado (cm)'))
-    await userEvent.type(screen.getByLabelText('Ancho solicitado (cm)'), '12')
-    await userEvent.clear(screen.getByLabelText('Alto solicitado (cm)'))
-    await userEvent.type(screen.getByLabelText('Alto solicitado (cm)'), '9')
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Ancho máximo (cm)' }))
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Ancho máximo (cm)' }), '12')
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Alto máximo (cm)' }))
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Alto máximo (cm)' }), '9')
     await userEvent.clear(screen.getByLabelText('Cantidad'))
     await userEvent.type(screen.getByLabelText('Cantidad'), '3')
     await userEvent.click(screen.getByLabelText('Permitir rotación'))
-    expect(screen.getByText(/celda solicitada/i)).toHaveTextContent(
-      'La celda solicitada define el espacio ocupado; el arte se ajusta proporcionalmente sin deformarse.',
+    expect(screen.getByText(/Las medidas máximas limitan/i)).toHaveTextContent(
+      'Las medidas máximas limitan el tamaño del arte, que se ajusta proporcionalmente sin deformarse. Solo su rectángulo visible ocupa espacio en la plancha.',
     )
     await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
 
@@ -486,12 +486,12 @@ describe('DesignList editing UI', () => {
     renderWithDesign()
 
     await userEvent.click(screen.getByRole('button', { name: /editar logo\.png/i }))
-    await userEvent.clear(screen.getByLabelText('Ancho solicitado (cm)'))
-    await userEvent.type(screen.getByLabelText('Ancho solicitado (cm)'), '10.5')
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Ancho máximo (cm)' }))
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Ancho máximo (cm)' }), '10.5')
     await userEvent.click(screen.getByRole('button', { name: /guardar cambios/i }))
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'El ancho solicitado debe ser un número entero mayor que 0.',
+      'El ancho máximo debe ser un número entero mayor que 0.',
     )
     expect(mockUpdateDesign).not.toHaveBeenCalled()
   })

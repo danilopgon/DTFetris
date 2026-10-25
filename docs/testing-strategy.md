@@ -23,6 +23,7 @@ Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDr
 - Límites físicos y no solapamiento; conservación del total de copias.
 - Petición vacía, cantidades cero mixtas, dimensiones inválidas, IDs duplicados y límites operativos.
 - Misma composición ante reordenamiento del mismo conjunto; 80 fixtures pseudoaleatorios reproducibles.
+- Bbox visible ajustado en cm fraccionarios (no celda sobrante), punto fijo a 1 micrómetro, separación de 3 mm y ajuste exacto al borde sin margen exterior forzado.
 
 ### Exportación
 
@@ -50,6 +51,25 @@ Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDr
 - Importación pendiente no contamina un trabajo restaurado.
 - Preview por plancha, recorte normalizado, rotación, imagen ausente y callback obsoleto.
 - Área visible y reservada diferenciadas; métricas por hoja/globales.
+
+### Color único
+
+- Validación estricta `#RRGGBB` en TS/Rust; ausente/null mantiene originales. Se rechazan abreviaturas, nombres y hex con alpha.
+- Composición PNG/SVG con un solo color y transparencia idéntica; prueba de los 256 valores alpha posibles, fuentes intactas y retirada de sobrescritura.
+- Guardar/cargar mantiene color; JSON v1 anterior sin campo sigue siendo válido.
+- Canvas real de Chromium: PNG y SVG coloreados, alpha parcial, borrado del color y payload de exportación. Las miniaturas solo se usan para preview; no sustituyen los tests de archivos Rust.
+
+### Agente externo
+
+- Handshake y framing MCP stdio, schemas de herramientas, errores y línea acotada; nada ajeno al protocolo en stdout.
+- Ingesta determinista, rutas canónicas restringidas, rechazo de escapes y nombres de destino fuera del workspace.
+- Mutaciones/errores atómicos, layout invalidado, exportación con confirmación explícita y no sobreescritura de PNG.
+- Flujo de trabajo real desde herramientas: importar → editar color/cantidad → packing → guardar/recuperar → exportar con fixtures privados. No configura ni llama a un LLM externo para los tests.
+- SVG 1.1 con `DOCTYPE` externo inerte aceptado sin fetch; rechazo de subconjuntos internos/entidades/DOCTYPE duplicado y errores de importación con detalle útil en MCP.
+
+## Validación de negocio local
+
+Una prueba real adicional preparó 8 diseños y 44 copias, con dos colores y 3 mm entre piezas. El agente separó vectorialmente un SVG compuesto fuera de DTFetris, verificando sus trazados. Se generaron por MCP un control de 60 × 100 y un candidato de 60 × 86 cm sin reducir las medidas visibles, comparados localmente con una referencia aceptada por el usuario. Se comprobaron cantidades, límites, separación, hashes de originales, recuperación del trabajo, PNG/DPI/alpha/colores y bboxes de las 44 piezas. No se incluyen los originales privados en los tests ni en Git. Esto **no equivale a aprobación visual del usuario ni a impresión física**.
 
 ## Verificación de una entrega
 

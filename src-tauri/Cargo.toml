@@ -13,6 +13,10 @@ rust-version = "1.77.2"
 name = "dtf-sheet-optimizer"
 path = "src/main.rs"
 
+[[bin]]
+name = "dtfetris-mcp"
+path = "src/mcp_main.rs"
+
 [lib]
 name = "dtf_sheet_optimizer_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -30,6 +34,7 @@ image = "0.25"
 png = "0.18"
 resvg = "0.43"
 uuid = { version = "1", features = ["v4"] }
+dirs = "6"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

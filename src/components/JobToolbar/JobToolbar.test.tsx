@@ -39,7 +39,7 @@ const sheet: Sheet = {
   id: 's1',
   widthCm: 60,
   heightCm: 100,
-  placements: [{ designId: 'logo', xCm: 0, yCm: 0, widthCm: 10, heightCm: 10, rotated: false }],
+  placements: [{ designId: 'logo', xCm: 0, yCm: 0, widthCm: 10, heightCm: 5, rotated: false }],
 }
 const job: Job = {
   version: 1,
@@ -64,15 +64,61 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('JobToolbar with real Zustand state and mocked commands/dialogs', () => {
+  it('shows 3 mm for a new job and converts an applied fractional mm gap to cm', async () => {
+    useAppStore.setState({ sheetConfig: { widthCm: 60, heightCm: 100, gapCm: 0.3 } })
+    render(<JobToolbar onBusyChange={vi.fn()} />)
+    const gap = screen.getByLabelText('Separación entre diseños (mm)')
+    expect(gap).toHaveValue(3)
+    await userEvent.clear(gap)
+    await userEvent.type(gap, '2.3')
+    expect(screen.getByRole('button', { name: 'Generar planchas' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Guardar trabajo' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Exportar PNG/ })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar configuración' }))
+    expect(useAppStore.getState().sheetConfig.gapCm).toBeCloseTo(0.23)
+    expect(gap).toHaveValue(2.3)
+    expect(useAppStore.getState().sheets).toEqual([])
+    expect(screen.getByRole('button', { name: 'Guardar trabajo' })).toBeEnabled()
+  })
+
+  it('shows zero separation for legacy jobs and does not silently apply an empty or negative draft', async () => {
+    render(<JobToolbar onBusyChange={vi.fn()} />)
+    const gap = screen.getByLabelText('Separación entre diseños (mm)')
+    expect(gap).toHaveValue(0)
+    await userEvent.clear(gap)
+    expect(screen.getByRole('button', { name: 'Aplicar configuración' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Generar planchas' })).toBeDisabled()
+    await userEvent.type(gap, '-1')
+    expect(screen.getByRole('button', { name: 'Aplicar configuración' })).toBeDisabled()
+    expect(useAppStore.getState().sheetConfig.gapCm).toBeUndefined()
+    await userEvent.clear(gap)
+    await userEvent.type(gap, '0.0')
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar configuración' }))
+    expect(screen.getByRole('button', { name: 'Generar planchas' })).toBeEnabled()
+    expect(gap).toHaveValue(0)
+  })
+
+  it('refreshes gap input when opening a new-format or legacy job', () => {
+    render(<JobToolbar onBusyChange={vi.fn()} />)
+    act(() =>
+      useAppStore
+        .getState()
+        .restoreJob({ ...job, sheetConfig: { ...job.sheetConfig, gapCm: 0.3 } }),
+    )
+    expect(screen.getByLabelText('Separación entre diseños (mm)')).toHaveValue(3)
+    act(() => useAppStore.getState().restoreJob(job))
+    expect(screen.getByLabelText('Separación entre diseños (mm)')).toHaveValue(0)
+  })
+
   it('allows clearing sheet inputs but blocks output until a valid size is applied', async () => {
     render(<JobToolbar onBusyChange={vi.fn()} />)
     const width = screen.getByLabelText('Ancho de plancha (cm)')
     await userEvent.clear(width)
     expect(width).toHaveValue(null)
     expect(screen.getByRole('button', { name: /Exportar PNG/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Aplicar tamaño' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Aplicar configuración' })).toBeDisabled()
     await userEvent.type(width, '40')
-    await userEvent.click(screen.getByRole('button', { name: 'Aplicar tamaño' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar configuración' }))
     expect(useAppStore.getState()).toMatchObject({
       sheetConfig: { widthCm: 40, heightCm: 100 },
       isLayoutStale: true,

@@ -171,6 +171,42 @@ pub fn validate_svg_tree_at_scale(
     )
 }
 
+/// External DOCTYPE identifiers are inert metadata in roxmltree (no resolver or
+/// I/O). Reject internal subsets before enabling DTD syntax: no entity expansion,
+/// parameter entities, or external entity declarations can enter the parser.
+fn check_svg_doctype(text: &str) -> Result<(), String> {
+    let error =
+        || "El SVG contiene un DTD interno o declaraciones de entidades no admitidas.".to_string();
+    if text.contains("<!ENTITY") {
+        return Err(error());
+    }
+    // XML permits one declaration. A conservative duplicate rejection also
+    // bounds this preflight to linear work, even for malformed quoted input.
+    let mut declarations = text.match_indices("<!DOCTYPE");
+    let declaration = declarations.next();
+    if declarations.next().is_some() {
+        return Err("El SVG contiene varias declaraciones DOCTYPE no admitidas.".into());
+    }
+    if let Some((start, _)) = declaration {
+        let mut quote = None;
+        for byte in text.as_bytes()[start + "<!DOCTYPE".len()..].iter().copied() {
+            if let Some(delimiter) = quote {
+                if byte == delimiter {
+                    quote = None;
+                }
+                continue;
+            }
+            match byte {
+                b'\'' | b'"' => quote = Some(byte),
+                b'[' => return Err(error()),
+                b'>' => break,
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Parse only uncompressed UTF-8 SVG without image resolvers. Never use default
 /// usvg options for user-provided SVG: those may read files or decode unbounded
 /// embedded images. The returned tree has been checked at intrinsic scale 1.
@@ -180,10 +216,11 @@ pub fn parse_svg(data: &[u8]) -> Result<resvg::usvg::Tree, String> {
     }
     let text =
         std::str::from_utf8(data).map_err(|_| "El SVG no es texto UTF-8 válido.".to_string())?;
+    check_svg_doctype(text)?;
     let document = resvg::usvg::roxmltree::Document::parse_with_options(
         text,
         resvg::usvg::roxmltree::ParsingOptions {
-            allow_dtd: false,
+            allow_dtd: true,
             nodes_limit: 10_000,
         },
     )
@@ -329,6 +366,52 @@ pub fn inspect_asset(path: &Path, format: &ImageFormat) -> Result<VisibleBounds,
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn harmless_public_and_unreachable_external_svg_doctypes_render_without_resolution() {
+        for doctype in [
+            r#"<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">"#,
+            r#"<!DOCTYPE svg SYSTEM "http://127.0.0.1:1/unreachable.dtd">"#,
+            r#"<!DOCTYPE svg SYSTEM 'https://unreachable.invalid/[quoted]>resource.dtd'>"#,
+        ] {
+            let text = format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>{doctype}<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"><rect width="8" height="4" fill="red"/></svg>"#
+            );
+            let tree = parse_svg(text.as_bytes()).unwrap();
+            let mut pixmap = resvg::tiny_skia::Pixmap::new(8, 4).unwrap();
+            resvg::render(
+                &tree,
+                resvg::tiny_skia::Transform::identity(),
+                &mut pixmap.as_mut(),
+            );
+            assert_eq!(&pixmap.data()[..4], &[255, 0, 0, 255]);
+        }
+    }
+
+    #[test]
+    fn rejects_all_internal_dtd_subsets_and_general_or_parameter_entity_definitions() {
+        for declaration in [
+            r#"<!DOCTYPE svg [<!ENTITY secret SYSTEM "file:///forbidden.txt">]>"#,
+            r#"<!DOCTYPE svg [<!ENTITY % external SYSTEM "file:///forbidden.dtd">%external;]>"#,
+            r#"<!DOCTYPE svg [<!ENTITY a "expanded">]>"#,
+            r#"<!DOCTYPE svg []>"#,
+            r#"<!DOCTYPE svg SYSTEM "https://unreachable.invalid/external.dtd" [<!ENTITY a "expanded">]>"#,
+            r#"<!DOCTYPE svg SYSTEM "quoted>[resource.dtd" [<!ENTITY % a SYSTEM "file:///forbidden.dtd">%a;]>"#,
+            r#"<!ENTITY external SYSTEM "file:///forbidden.txt">"#,
+        ] {
+            let text = format!(
+                r#"<?xml version="1.0"?>{declaration}<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"><rect width="8" height="4"/></svg>"#
+            );
+            let error = parse_svg(text.as_bytes()).unwrap_err();
+            assert!(
+                error.contains("DTD interno") && error.contains("entidades"),
+                "{error}"
+            );
+        }
+        let undeclared = br#"<!DOCTYPE svg SYSTEM "http://127.0.0.1:1/unreachable.dtd"><svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"><title>&external;</title><rect width="8" height="4"/></svg>"#;
+        assert!(parse_svg(undeclared).is_err());
+        assert!(parse_svg(br#"<!DOCTYPE svg SYSTEM "a"><!DOCTYPE svg SYSTEM "b"><svg xmlns="http://www.w3.org/2000/svg"/>"#).is_err());
+    }
 
     struct Fixture(std::path::PathBuf);
     impl Fixture {

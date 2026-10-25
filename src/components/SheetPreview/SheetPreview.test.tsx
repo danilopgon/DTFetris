@@ -13,15 +13,41 @@ vi.mock('react-konva', () => ({
     </div>
   ),
   Layer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  Group: ({ children, rotation }: { children: ReactNode; rotation?: number }) => (
-    <div data-rotation={rotation}>{children}</div>
+  Group: ({
+    children,
+    rotation,
+    x,
+    y,
+  }: {
+    children: ReactNode
+    rotation?: number
+    x?: number
+    y?: number
+  }) => (
+    <div data-rotation={rotation} data-x={x} data-y={y}>
+      {children}
+    </div>
   ),
   Rect: () => null,
-  Image: ({ width, height, crop }: { width: number; height: number; crop: object }) => (
+  Image: ({
+    width,
+    height,
+    crop,
+    x,
+    y,
+  }: {
+    width: number
+    height: number
+    crop: object
+    x: number
+    y: number
+  }) => (
     <div
       data-testid="artwork"
       data-width={width}
       data-height={height}
+      data-x={x}
+      data-y={y}
       data-crop={JSON.stringify(crop)}
     />
   ),
@@ -51,7 +77,7 @@ const sheet: Sheet = {
   id: 's1',
   widthCm: 20,
   heightCm: 10,
-  placements: [{ designId: 'logo', xCm: 0, yCm: 0, widthCm: 10, heightCm: 10, rotated: false }],
+  placements: [{ designId: 'logo', xCm: 0, yCm: 0, widthCm: 10, heightCm: 5, rotated: false }],
 }
 
 beforeEach(() => {
@@ -83,6 +109,40 @@ afterEach(() => {
 })
 
 describe('SheetPreview (Konva rendering mocked)', () => {
+  it.each([false, true])(
+    'draws a fractional visible footprint at its own origin without overflowing (rotated=%s)',
+    async (rotated) => {
+      useAppStore.setState({
+        designs: [{ ...design, widthCm: 10, heightCm: 8, originalAspectRatio: 25 / 19 }],
+        sheets: [
+          {
+            ...sheet,
+            gapCm: 0.3,
+            placements: [
+              {
+                ...sheet.placements[0],
+                widthCm: rotated ? 7.6 : 10,
+                heightCm: rotated ? 10 : 7.6,
+                rotated,
+              },
+            ],
+          },
+        ],
+      })
+      render(<SheetPreview />)
+      act(() => pendingImages[0].onload?.(new Event('load')))
+      const artwork = await screen.findByTestId('artwork')
+      expect(artwork).toHaveAttribute('data-x', '0')
+      expect(artwork).toHaveAttribute('data-y', '0')
+      expect(Number(artwork.dataset.width)).toBeCloseTo(60)
+      expect(Number(artwork.dataset.height)).toBeCloseTo(45.6)
+      expect(Number(artwork.dataset.width)).toBeLessThanOrEqual(60)
+      expect(Number(artwork.dataset.height)).toBeLessThanOrEqual(7.6 * 6)
+      expect(Number(artwork.parentElement?.dataset.x)).toBeCloseTo(rotated ? 45.6 : 0)
+      expect(artwork.parentElement).toHaveAttribute('data-rotation', rotated ? '90' : '0')
+    },
+  )
+
   it.each(['png', 'svg'] as const)(
     'shares a tinted %s source across copies and normalizes crop to its thumbnail dimensions',
     async (format) => {
@@ -105,7 +165,7 @@ describe('SheetPreview (Konva rendering mocked)', () => {
             ...sheet,
             placements: [
               sheet.placements[0],
-              { ...sheet.placements[0], designId: 'copy', rotated: true },
+              { ...sheet.placements[0], designId: 'copy', widthCm: 5, heightCm: 10, rotated: true },
             ],
           },
         ],
@@ -154,7 +214,11 @@ describe('SheetPreview (Konva rendering mocked)', () => {
       designs: [design, { ...design, id: 'duplicate' }],
       sheets: [
         sheet,
-        { ...sheet, id: 's2', placements: [{ ...sheet.placements[0], rotated: true }] },
+        {
+          ...sheet,
+          id: 's2',
+          placements: [{ ...sheet.placements[0], widthCm: 5, heightCm: 10, rotated: true }],
+        },
       ],
     })
     render(<SheetPreview />)

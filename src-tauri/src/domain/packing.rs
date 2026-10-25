@@ -1,13 +1,32 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::design::{parse_color_override, DesignInput, Placement, Sheet};
+use crate::domain::design::{
+    fitted_visible_size_cm, parse_color_override, DesignInput, Placement, Sheet,
+};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gap_cm: Option<f64>,
     pub width_cm: f64,
     pub height_cm: f64,
+}
+
+/// Missing gap is the legacy zero-gap contract. Upper bound keeps fixed-point arithmetic safe.
+pub fn validate_gap_cm(gap: Option<f64>) -> Result<f64, String> {
+    let gap = gap.unwrap_or(0.0);
+    if !gap.is_finite() || gap < 0.0 || gap > u32::MAX as f64 {
+        return Err("La separación debe ser finita y estar entre 0 y 4294967295 cm.".into());
+    }
+    Ok(gap)
+}
+
+pub const CM_QUANTUM: f64 = 0.0001;
+const UNITS_PER_CM: f64 = 10_000.0;
+fn ceil_units(cm: f64) -> u64 {
+    (cm * UNITS_PER_CM).ceil() as u64
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +76,8 @@ fn is_positive_integer_cm(value: f64) -> bool {
 }
 
 pub fn validate_packing_request(request: &PackingRequest) -> Result<(), UnplacedReasonCode> {
-    if !is_positive_integer_cm(request.sheet.width_cm)
+    if validate_gap_cm(request.sheet.gap_cm).is_err()
+        || !is_positive_integer_cm(request.sheet.width_cm)
         || !is_positive_integer_cm(request.sheet.height_cm)
         || request.designs.iter().any(|design| {
             !is_positive_integer_cm(design.width_cm) || !is_positive_integer_cm(design.height_cm)
@@ -80,17 +100,17 @@ const WORKLOAD_ERROR: &str = "packing_limit_exceeded";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Rect {
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
+    x: u64,
+    y: u64,
+    width: u64,
+    height: u64,
 }
 
 impl Rect {
-    fn right(self) -> u32 {
+    fn right(self) -> u64 {
         self.x + self.width
     }
-    fn bottom(self) -> u32 {
+    fn bottom(self) -> u64 {
         self.y + self.height
     }
 
@@ -173,7 +193,7 @@ fn occupy(free: &mut Vec<Rect>, used: Rect, work: &mut usize) -> Result<(), Stri
     Ok(())
 }
 
-type Score = (u32, u32, usize, u32, u32, bool);
+type Score = (u64, u64, usize, u64, u64, bool);
 
 /// Pure cm-based deterministic MaxRects / Best Short Side Fit.
 /// Invalid requests fail atomically; valid oversized copies are explicit unplaced items.
@@ -197,24 +217,28 @@ pub fn pack(request: &PackingRequest) -> Result<PackingResult, String> {
         }
     }
 
-    // Canonical ordering makes the complete JSON independent of input list order.
-    let mut designs: Vec<_> = request.designs.iter().collect();
+    let gap = ceil_units(validate_gap_cm(request.sheet.gap_cm)?);
+    // Fixed-point centimeters, rounded outward to one micrometer, never pixels.
+    let mut designs = request
+        .designs
+        .iter()
+        .map(|d| {
+            let (w, h) = fitted_visible_size_cm(d)?;
+            Ok((d, ceil_units(w), ceil_units(h)))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     designs.sort_by(|a, b| {
-        let area = |d: &DesignInput| d.width_cm as u64 * d.height_cm as u64;
+        let area = |d: &(&DesignInput, u64, u64)| u128::from(d.1) * u128::from(d.2);
         area(b)
             .cmp(&area(a))
-            .then_with(|| {
-                b.width_cm
-                    .max(b.height_cm)
-                    .total_cmp(&a.width_cm.max(a.height_cm))
-            })
-            .then_with(|| a.id.cmp(&b.id))
+            .then_with(|| b.1.max(b.2).cmp(&a.1.max(a.2)))
+            .then_with(|| a.0.id.cmp(&b.0.id))
     });
     let empty = Rect {
         x: 0,
         y: 0,
-        width: request.sheet.width_cm as u32,
-        height: request.sheet.height_cm as u32,
+        width: ceil_units(request.sheet.width_cm) + gap,
+        height: ceil_units(request.sheet.height_cm) + gap,
     };
     let mut result = PackingResult {
         sheets: Vec::new(),
@@ -223,9 +247,9 @@ pub fn pack(request: &PackingRequest) -> Result<PackingResult, String> {
     let mut pages: Vec<Vec<Rect>> = Vec::new();
     let mut work = MAX_PACKING_WORK;
 
-    for design in designs {
-        let width = design.width_cm as u32;
-        let height = design.height_cm as u32;
+    for (design, artwork_width, artwork_height) in designs {
+        let width = artwork_width + gap;
+        let height = artwork_height + gap;
         let fits = |w, h| w <= empty.width && h <= empty.height;
         if !fits(width, height) && !(design.can_rotate && fits(height, width)) {
             for item_index in 0..design.quantity {
@@ -284,6 +308,7 @@ pub fn pack(request: &PackingRequest) -> Result<PackingResult, String> {
             if page_index == pages.len() {
                 pages.push(vec![empty]);
                 result.sheets.push(Sheet {
+                    gap_cm: request.sheet.gap_cm,
                     id: format!("sheet-{}", pages.len()),
                     width_cm: request.sheet.width_cm,
                     height_cm: request.sheet.height_cm,
@@ -293,10 +318,10 @@ pub fn pack(request: &PackingRequest) -> Result<PackingResult, String> {
             occupy(&mut pages[page_index], used, &mut work)?;
             result.sheets[page_index].placements.push(Placement {
                 design_id: design.id.clone(),
-                x_cm: used.x as f64,
-                y_cm: used.y as f64,
-                width_cm: used.width as f64,
-                height_cm: used.height as f64,
+                x_cm: used.x as f64 / UNITS_PER_CM,
+                y_cm: used.y as f64 / UNITS_PER_CM,
+                width_cm: (used.width - gap) as f64 / UNITS_PER_CM,
+                height_cm: (used.height - gap) as f64 / UNITS_PER_CM,
                 rotated: score.5,
             });
         }
@@ -343,6 +368,7 @@ mod tests {
     fn request(width: f64, height: f64, designs: Vec<DesignInput>) -> PackingRequest {
         PackingRequest {
             sheet: SheetConfig {
+                gap_cm: None,
                 width_cm: width,
                 height_cm: height,
             },
@@ -352,6 +378,15 @@ mod tests {
 
     fn design(id: &str, width: f64, height: f64, quantity: u32, rotate: bool) -> DesignInput {
         DesignInput {
+            original_aspect_ratio: width / height,
+            visible_bounds: VisibleBounds {
+                x_px: 0.0,
+                y_px: 0.0,
+                width_px: width,
+                height_px: height,
+                source_width_px: width,
+                source_height_px: height,
+            },
             id: id.into(),
             width_cm: width,
             height_cm: height,
@@ -379,6 +414,137 @@ mod tests {
         );
     }
 
+    fn narrow_design(quantity: u32) -> DesignInput {
+        let mut d = design("narrow", 9.0, 8.0, quantity, false);
+        d.original_aspect_ratio = 570.0 / 91.0;
+        d.visible_bounds.width_px = 570.0;
+        d.visible_bounds.height_px = 91.0;
+        d.visible_bounds.source_width_px = 570.0;
+        d.visible_bounds.source_height_px = 91.0;
+        d
+    }
+
+    #[test]
+    fn fitted_narrow_art_uses_actual_height_without_upscaling_or_unused_cell() {
+        let r = request(9.0, 8.0, vec![narrow_design(5)]);
+        let result = pack(&r).unwrap();
+        assert_eq!(result.sheets.len(), 1);
+        for p in &result.sheets[0].placements {
+            assert_eq!(p.width_cm, 9.0);
+            assert_eq!(p.height_cm, 1.4369);
+            assert!(p.x_cm + p.width_cm <= 9.0);
+            assert!(p.y_cm + p.height_cm <= 8.0);
+        }
+        let too_wide = request(8.0, 8.0, vec![narrow_design(1)]);
+        assert_eq!(pack(&too_wide).unwrap().unplaced_items.len(), 1);
+    }
+
+    #[test]
+    fn gap_is_between_artworks_not_a_sheet_edge_margin_and_rounds_outward() {
+        let mut r = request(9.0, 8.0, vec![narrow_design(8)]);
+        r.sheet.gap_cm = Some(0.3);
+        let result = pack(&r).unwrap();
+        assert_eq!(result.sheets.len(), 2);
+        assert_eq!(result.sheets[0].gap_cm, Some(0.3));
+        assert_eq!(result.sheets[0].placements[0].x_cm, 0.0);
+        assert_eq!(result.sheets[0].placements[0].width_cm, 9.0);
+        for sheet in &result.sheets {
+            for (i, p) in sheet.placements.iter().enumerate() {
+                for q in &sheet.placements[i + 1..] {
+                    assert!(
+                        p.x_cm + p.width_cm + 0.3 <= q.x_cm + 1e-9
+                            || q.x_cm + q.width_cm + 0.3 <= p.x_cm + 1e-9
+                            || p.y_cm + p.height_cm + 0.3 <= q.y_cm + 1e-9
+                            || q.y_cm + q.height_cm + 0.3 <= p.y_cm + 1e-9
+                    );
+                }
+            }
+        }
+        let mut edge = request(9.0, 8.0, vec![design("edge", 9.0, 8.0, 1, false)]);
+        edge.sheet.gap_cm = Some(0.30001);
+        let p = &pack(&edge).unwrap().sheets[0].placements[0];
+        assert_eq!(
+            (p.x_cm, p.y_cm, p.width_cm, p.height_cm),
+            (0.0, 0.0, 9.0, 8.0)
+        );
+    }
+
+    #[test]
+    fn fractional_fit_rotates_deterministically_and_rejects_invalid_metadata_gap() {
+        let mut d = narrow_design(4);
+        d.can_rotate = true;
+        let mut r = request(2.0, 9.0, vec![d]);
+        r.sheet.gap_cm = Some(0.3);
+        let result = pack(&r).unwrap();
+        assert!(result
+            .sheets
+            .iter()
+            .flat_map(|s| &s.placements)
+            .all(|p| p.rotated && p.width_cm == 1.4369 && p.height_cm == 9.0));
+        assert_eq!(
+            serde_json::to_value(&result).unwrap(),
+            serde_json::to_value(pack(&r).unwrap()).unwrap()
+        );
+        for gap in [f64::NAN, f64::INFINITY, -0.1, f64::MAX] {
+            r.sheet.gap_cm = Some(gap);
+            assert!(pack(&r).is_err());
+        }
+        r.sheet.gap_cm = None;
+        r.designs[0].original_aspect_ratio = 1.0;
+        assert!(pack(&r).is_err());
+    }
+
+    #[test]
+    fn seeded_fractional_fits_preserve_gap_bounds_quantities_and_order_independence() {
+        for seed in 1..20 {
+            let mut designs = Vec::new();
+            for i in 1..12 {
+                let mut d = design(&format!("{i}"), 3.0 + (i % 4) as f64, 5.0, 2, true);
+                let w = (seed * 31 + i * 17) as f64;
+                let h = (seed * 7 + i * 13) as f64;
+                d.visible_bounds.width_px = w;
+                d.visible_bounds.source_width_px = w;
+                d.visible_bounds.height_px = h;
+                d.visible_bounds.source_height_px = h;
+                d.original_aspect_ratio = w / h;
+                designs.push(d);
+            }
+            let mut r = request(20.0, 20.0, designs);
+            r.sheet.gap_cm = Some(0.30001);
+            let result = pack(&r).unwrap();
+            for s in &result.sheets {
+                for (i, p) in s.placements.iter().enumerate() {
+                    assert!(
+                        p.x_cm + p.width_cm <= s.width_cm + 1e-9
+                            && p.y_cm + p.height_cm <= s.height_cm + 1e-9
+                    );
+                    for q in &s.placements[i + 1..] {
+                        let gap = 0.3001;
+                        assert!(
+                            p.x_cm + p.width_cm + gap <= q.x_cm + 1e-9
+                                || q.x_cm + q.width_cm + gap <= p.x_cm + 1e-9
+                                || p.y_cm + p.height_cm + gap <= q.y_cm + 1e-9
+                                || q.y_cm + q.height_cm + gap <= p.y_cm + 1e-9
+                        );
+                    }
+                }
+            }
+            assert_eq!(
+                result
+                    .sheets
+                    .iter()
+                    .map(|s| s.placements.len())
+                    .sum::<usize>(),
+                22
+            );
+            r.designs.reverse();
+            assert_eq!(
+                serde_json::to_value(result).unwrap(),
+                serde_json::to_value(pack(&r).unwrap()).unwrap()
+            );
+        }
+    }
+
     fn assert_invariants(request: &PackingRequest, result: &PackingResult) {
         for (index, sheet) in result.sheets.iter().enumerate() {
             assert_eq!(sheet.id, format!("sheet-{}", index + 1));
@@ -392,8 +558,8 @@ mod tests {
                     .find(|d| d.id == p.design_id)
                     .unwrap();
                 assert!(p.x_cm >= 0.0 && p.y_cm >= 0.0);
-                assert!(p.x_cm + p.width_cm <= sheet.width_cm);
-                assert!(p.y_cm + p.height_cm <= sheet.height_cm);
+                assert!(p.x_cm + p.width_cm <= sheet.width_cm + 1e-7);
+                assert!(p.y_cm + p.height_cm <= sheet.height_cm + 1e-7);
                 let expected = if p.rotated {
                     assert!(d.can_rotate);
                     (d.height_cm, d.width_cm)
@@ -612,6 +778,7 @@ mod tests {
     fn validation_accepts_integer_cm_and_positive_quantity_designs() {
         let request = PackingRequest {
             sheet: SheetConfig {
+                gap_cm: None,
                 width_cm: 60.0,
                 height_cm: 100.0,
             },
@@ -626,6 +793,7 @@ mod tests {
         let invalid_requests = [
             PackingRequest {
                 sheet: SheetConfig {
+                    gap_cm: None,
                     width_cm: 60.5,
                     height_cm: 100.0,
                 },
@@ -633,6 +801,7 @@ mod tests {
             },
             PackingRequest {
                 sheet: SheetConfig {
+                    gap_cm: None,
                     width_cm: 0.0,
                     height_cm: 100.0,
                 },
@@ -640,6 +809,7 @@ mod tests {
             },
             PackingRequest {
                 sheet: SheetConfig {
+                    gap_cm: None,
                     width_cm: 60.0,
                     height_cm: 100.0,
                 },
@@ -662,6 +832,7 @@ mod tests {
     fn validation_rejects_requests_without_positive_quantity() {
         let request = PackingRequest {
             sheet: SheetConfig {
+                gap_cm: None,
                 width_cm: 60.0,
                 height_cm: 100.0,
             },
@@ -678,6 +849,7 @@ mod tests {
     fn packing_result_serializes_explicit_unplaced_items() {
         let result = PackingResult {
             sheets: vec![Sheet {
+                gap_cm: None,
                 id: "sheet-1".to_string(),
                 width_cm: 60.0,
                 height_cm: 100.0,

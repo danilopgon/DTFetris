@@ -13,7 +13,7 @@ El dominio trabaja en centímetros. Las conversiones a píxeles son detalles de 
 | Cantidad editable | La cantidad de un diseño debe ser un entero `>= 1`; `0` no significa ocultar. |
 | Cantidad para generar | Generación/packing requiere al menos un diseño y cantidad positiva en todos; máximo operativo 1000 copias totales. |
 | Aspect ratio | Se calcula al cargar la imagen y queda como campo explícito e inmutable. |
-| Transparencia en diseños | Los límites visibles definen la proporción del arte; la celda solicitada define el espacio ocupado. |
+| Transparencia en diseños | Los límites visibles definen la proporción; las medidas solicitadas son máximos y el footprint es el tamaño visible ajustado. |
 | Deformación | Nunca automática; requiere confirmación explícita. |
 | Ajuste proporcional | Si la celda solicitada y el arte visible tienen distinta proporción, el tamaño visible se deriva proporcionalmente dentro de la celda y no reemplaza las dimensiones solicitadas. |
 | Rutas de imagen | Se almacenan como rutas en disco dentro de `app_data_dir`, no como objetos `File`. |
@@ -68,15 +68,15 @@ El área visible se define operativamente así:
 - Para PNG y SVG se aplica el mismo umbral después de rasterizar. SVG se rasteriza con `resvg` antes de detectar límites visibles.
 - El contorno visible es el bounding box alineado a ejes (AABB) de todos los píxeles que cumplen el umbral.
 - Bordes semitransparentes, gradientes y sombras cuentan si su alpha cumple el umbral; por debajo del umbral se ignoran.
-- Los límites se ajustan a píxeles enteros del raster. En el MVP, la expansión de margen visible o seguridad es `0 mm`; cualquier margen o sangrado futuro debe ser configuración explícita del dominio.
+- Los límites se ajustan a píxeles enteros del raster. No se expande el contorno visible (0 mm); esto es distinto de la separación entre piezas, configurable por `gapCm` y de 3 mm en nuevos trabajos. No hay sangrado automático.
 
 Ejemplo crítico:
 
-- Si el usuario configura una celda de 8 cm x 8 cm, esa celda es el footprint solicitado.
+- Los 8 × 8 cm solicitados son **límites máximos**, no una celda que deba reservarse entera. Con arte 2:1 el footprint visible es 8 × 4 cm.
 - Si el arte visible no es cuadrado, se ajusta proporcionalmente dentro de esa celda sin estirarse; el tamaño visible derivado puede ocupar menos ancho o alto.
 - Si el archivo fuente tiene padding transparente, ese padding no cambia la proporción del arte visible ni aumenta el tamaño visible derivado.
 
-Los límites visibles se detectan al importar y se persisten como metadatos del diseño. Preview y exportación consumen esos metadatos; el packing reserva la celda solicitada y no lee píxeles ni archivos.
+Los límites visibles se detectan al importar y se persisten como metadatos. Preview, exportación y packing derivan el tamaño ajustado proporcional usando esos metadatos y los máximos solicitados. El packing no lee píxeles ni archivos.
 
 ## Modelo TypeScript
 
@@ -111,6 +111,7 @@ type ImportDesignErrorCode =
 type SheetConfig = {
   widthCm: Cm
   heightCm: Cm
+  gapCm?: Cm
 }
 
 type DesignInput = {
@@ -124,6 +125,7 @@ type DesignInput = {
   canRotate: boolean
   format: ImageFormat           // 'png' | 'svg'
   visibleBounds: VisibleBounds  // límites del arte sin padding transparente
+  colorOverride?: string | null
 }
 
 type Placement = {
@@ -140,6 +142,7 @@ type Sheet = {
   widthCm: Cm
   heightCm: Cm
   placements: Placement[]
+  gapCm?: Cm
 }
 
 type PackingRequest = {
@@ -169,7 +172,7 @@ Los códigos técnicos como `does_not_fit` o `invalid_format` son valores establ
 
 `DesignInput.imagePath` siempre apunta a una copia dentro de `app_data_dir/design-assets/`. La ruta original del usuario no se persiste. Importar el mismo archivo dos veces produce dos copias con UUIDs distintos.
 
-`DesignInput.widthCm` y `DesignInput.heightCm` son la celda solicitada por el usuario y el footprint ocupado en v0.1. No derivan del `viewBox` SVG ni de las dimensiones en píxeles del archivo fuente. `VisibleBounds` y `originalAspectRatio` permiten derivar el tamaño visible proporcional cuando preview, packing o exportación lo necesiten, pero ese valor derivado no se persiste sobre la intención del usuario.
+`DesignInput.widthCm` y `DesignInput.heightCm` son los límites máximos solicitados, no el footprint ocupado. No derivan del `viewBox` SVG ni de los píxeles de la fuente. `VisibleBounds` y `originalAspectRatio` permiten derivar el tamaño visible proporcional, usado en placements/preview/exportación sin reemplazar los máximos guardados.
 
 ### Validación TypeScript
 
@@ -247,6 +250,14 @@ struct Sheet {
 - Assets: hasta 20 MiB, 32 millones de píxeles y 16384 píxeles por lado. PNG debe ser PNG real; SVG UTF-8 autocontenido, sin texto (convertir a trazados), imágenes anidadas/enlazadas, scripts, contenido HTML o patrones. Se limita también complejidad y memoria de capas/filtros SVG.
 - Exportación: hasta 100 millones de píxeles y 32768 píxeles por lado de raster destino. Estos límites protegen recursos; no fijan medidas de plancha.
 - Cambios de archivos se detectan por formato, geometría y límites visibles. No se mantiene hash: sustituir píxeles preservando exactamente los mismos bounds no se detecta como una edición.
+
+## Separación y precisión física
+
+- `SheetConfig.gapCm` y `Sheet.gapCm` son opcionales; ausentes significan 0 para trabajos anteriores. Los trabajos nuevos UI/MCP comienzan con **0.3 cm (3 mm)**, configurable. La interfaz muestra mm y persiste cm.
+- La separación es finita, no negativa y hasta `u32::MAX` cm; admite fracciones.
+- Packing usa punto fijo de **0.0001 cm (1 micrómetro)**, nunca píxeles. Redondea hacia fuera tamaño visible/separación para no recortarlos; los placements admiten cm fraccionarios. La holgura es inferior a 1 micrómetro por dimensión.
+- Se infla por derecha/abajo el rectángulo de búsqueda y la hoja virtual. El arte queda dentro de la plancha física, sin exigir margen exterior.
+- Exportación/preview colocan el arte dentro del bbox visible, con solo la holgura de redondeo; no lo centran en una celda vacía de los máximos originales.
 
 ## Color de impresión
 

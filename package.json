@@ -9,11 +9,13 @@
     "dev:vite": "vite",
     "build": "tauri build",
     "build:frontend": "tsc --noEmit && vite build",
+    "build:mcp": "cargo build --manifest-path src-tauri/Cargo.toml --release --bin dtfetris-mcp",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:mcp": "node tests/mcp/stdio-smoke.mjs",
     "lint": "eslint src",
     "format": "prettier --write src"
   },

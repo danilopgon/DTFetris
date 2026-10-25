@@ -12,7 +12,7 @@
 
 ## Decisiones
 
-MaxRects propio pequeño frente a adaptar una crate que no satisface directamente algoritmo/rotación/no ubicados (ver [decisión](packing-decision.md)). La celda solicitada reserva espacio y el arte se ajusta sin deformarse. Se recalcula explícitamente para no generar por cada pulsación. Se persisten entradas, no layouts potencialmente obsoletos. La validación de assets es compartida y rechaza SVG que podrían renderizarse incompletos. Los límites de recursos son operativos, no dimensiones físicas fijas.
+MaxRects propio pequeño frente a adaptar una crate que no satisface directamente algoritmo/rotación/no ubicados (ver [decisión](packing-decision.md)). Tras validar el caso real, las medidas son máximos y se reserva el bbox visible ajustado, con separación configurable, no la celda sobrante. Se recalcula explícitamente para no generar por cada pulsación. Se persisten entradas, no layouts potencialmente obsoletos. La validación de assets es compartida y rechaza SVG que podrían renderizarse incompletos. Los límites de recursos son operativos, no dimensiones físicas fijas.
 
 ## Verificación ejecutada
 
@@ -45,3 +45,31 @@ El test de impresión escribe una hoja completa de **7087 × 11811 px**, verific
 Desde código: `pnpm install --frozen-lockfile`, `pnpm dev`. Producción: `pnpm build`; instaladores en `src-tauri/target/release/bundle/{msi,nsis}/`. La app compilada necesita WebView2, no Node/Rust.
 
 Seguir [manual-dtf-check.md](manual-dtf-check.md): importar diseños propios, confirmar arte visible y cantidades, generar todas las hojas, exportar con nombre nuevo, verificar tamaño/densidad, guardar/abrir/regenerar/reexportar y comprobar en el RIP al 100% antes de imprimir. No se hace merge automático a `main`.
+
+## Ampliación del MVP: color y agente externo
+
+El usuario incorporó dos requisitos necesarios al alcance: un color hexadecimal por diseño y preparación con agente externo mediante MCP/carpeta de ingesta. La tabla de verificación anterior corresponde al MVP base; el estado actualizado está en G/H del roadmap.
+
+### Color
+
+Implementado y verificado: `colorOverride` opcional, estricto `#RRGGBB`, preserva alpha/originales, aplica igual a PNG/SVG y puede retirarse. Se conserva al duplicar y guardar/abrir; JSON v1 antiguo sigue siendo válido. Preview con miniaturas coloreadas acotadas, nunca usadas para exportar. Evidencia: **129 tests frontend**, **72 Rust** en la revisión de color, **4 E2E Chromium** incluyendo píxeles reales de PNG/SVG con alpha parcial y retirada del color, lint y build frontend correctos.
+
+### Agente externo
+
+Se añade un adaptador MCP local por stdio que reutiliza Rust, sin chat, claves, HTTP ni proveedor de modelo en DTFetris. Dos raíces explícitas: ingesta de solo lectura y workspace para trabajos/exportaciones. Las medidas se confirman, no se infieren de píxeles ni nombres. Exportación y sobrescritura requieren acciones explícitas; los JSON preparados se revisan abriéndolos en la app, sin sincronización en vivo del store. Configuración y límites en [agent-integration.md](agent-integration.md).
+
+Evidencia adicional: **12 tests MCP** (84 Rust en total), con PNG/SVG de fixture, controles de rutas incluyendo enlaces, retirada explícita de color, guardado y exportación. `npm run build:mcp` correcto; `npm run test:mcp` correcto contra el EXE release real mediante pipes (inicialización, 12 herramientas, estado/listado/ping y cierre por EOF). El adaptador no necesita SDK ni una dependencia de orquestación; `dirs` ya era transitiva de Tauri y ahora se declara directamente para resolver el mismo almacenamiento.
+
+En esa fase inicial solo se usaron fixtures, sin importar diseños del usuario. La validación privada posterior se describe abajo. No se ha modificado la configuración persistente de un cliente MCP del usuario. El control de rutas presupone directorios locales de confianza; no se presenta como un sandbox frente a sustituciones concurrentes del filesystem.
+
+## Validación de negocio posterior
+
+El usuario autorizó después un encargo privado real. Se corrigieron dos limitaciones descubiertas con él: el packing reservaba los máximos completos en vez del arte visible, y el parser rechazaba un `DOCTYPE` SVG 1.1 inerte. Ahora el footprint es el bbox ajustado, la separación es configurable (3 mm elegidos) y se acepta el doctype externo sin cargarlo, manteniendo bloqueadas las entidades y subconjuntos internos.
+
+Evidencia vigente: **145 tests frontend / 95 Rust / 5 E2E web**, smoke del MCP release y builds EXE/MSI/NSIS/servidor correctos. El encargo real de 44 piezas se generó efectivamente mediante MCP, incluidos guardado/recuperación y verificación independiente del PNG. El agente separó tres diseños de un SVG compuesto conservando trazados, fuera de la aplicación.
+
+Se generaron un control 60 × 100 y un candidato **60 × 86 cm**, de **7087 × 10157 px a 300 DPI**, preservando tamaños visibles y 3 mm entre bboxes: 14% menos superficie de plancha. El barrido encontró esa menor altura entera para esta heurística, no demuestra optimalidad global. Se verificaron los 44 bboxes impresos, colores/alpha y originales sin cambios; desvío de rasterización de bbox frente al plan inferior a 0.272 mm. Arte, nombres y resultados privados se mantienen fuera del repositorio. La comparación HTML/PNG local está preparada para el usuario.
+
+**No aprobado todavía**: queda la comparación visual del usuario y la validación física/RIP. No se sustituye esa aprobación por los tests técnicos ni se declara verificado un diálogo nativo que no se probó.
+
+Se respetaron los máximos físicos del pedido, no las escalas manuales exactas de la referencia. La reducción del 14% compara superficies de hoja; no demuestra una mejora de packing a idénticas escalas frente a Photopea. Entre control y candidato DTFetris sí se mantuvieron idénticos tamaños visibles.

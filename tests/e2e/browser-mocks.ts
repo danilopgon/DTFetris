@@ -87,8 +87,8 @@ export async function installBrowserMocks(page: Page) {
                       designId: d.id,
                       xCm: 0,
                       yCm: 0,
-                      widthCm: d.widthCm,
-                      heightCm: d.heightCm,
+                      widthCm: Math.min(d.widthCm, d.heightCm * d.originalAspectRatio),
+                      heightCm: Math.min(d.heightCm, d.widthCm / d.originalAspectRatio),
                       rotated: false,
                     },
                   ],
@@ -117,7 +117,11 @@ export async function installBrowserMocks(page: Page) {
 
 export async function importThroughUi(page: Page) {
   await page.getByRole('button', { name: /Seleccionar.*PNG.*SVG/ }).click()
-  await page.getByRole('spinbutton', { name: 'Ancho en centímetros', exact: true }).fill('60')
-  await page.getByRole('spinbutton', { name: 'Alto en centímetros', exact: true }).fill('100')
+  await page
+    .getByRole('spinbutton', { name: 'Ancho máximo en centímetros', exact: true })
+    .fill('60')
+  await page
+    .getByRole('spinbutton', { name: 'Alto máximo en centímetros', exact: true })
+    .fill('100')
   await page.getByRole('button', { name: 'Importar diseño', exact: true }).click()
 }
