@@ -9,23 +9,23 @@ El dominio trabaja en centímetros. Las conversiones a píxeles son detalles de 
 | Unidad fuente de verdad | Centímetros en todo el dominio. |
 | Dimensiones de plancha | Configurables por usuario, sin valores hardcodeados. |
 | Dimensiones físicas MVP | Plancha y celdas solicitadas de diseño usan centímetros enteros positivos; no se aceptan decimales, cero ni negativos. |
-| Plancha inicial de la app | Trabajo nuevo inicia con 55 cm de ancho x 100 cm de alto; no es una invariante del dominio. |
+| Plancha inicial de la app | Trabajo nuevo inicia con 60 cm de ancho x 100 cm de alto; no es una invariante del dominio. |
 | Cantidad editable | La cantidad de un diseño debe ser un entero `>= 1`; `0` no significa ocultar. |
-| Cantidad para generar | Generación/packing requiere diseños válidos y al menos un diseño con `quantity > 0`. |
+| Cantidad para generar | Generación/packing requiere al menos un diseño y cantidad positiva en todos; máximo operativo 1000 copias totales. |
 | Aspect ratio | Se calcula al cargar la imagen y queda como campo explícito e inmutable. |
 | Transparencia en diseños | Los límites visibles definen la proporción del arte; la celda solicitada define el espacio ocupado. |
 | Deformación | Nunca automática; requiere confirmación explícita. |
 | Ajuste proporcional | Si la celda solicitada y el arte visible tienen distinta proporción, el tamaño visible se deriva proporcionalmente dentro de la celda y no reemplaza las dimensiones solicitadas. |
 | Rutas de imagen | Se almacenan como rutas en disco dentro de `app_data_dir`, no como objetos `File`. |
 | Duplicado | Comparte la misma ruta de imagen que el original. |
-| Ítems no ubicados | El resultado de packing conserva ítems no ubicados de forma explícita para multipágina futura. |
+| Ítems no ubicados | Las copias imposibles se conservan explícitamente; el overflow que sí cabe continúa en nuevas hojas. |
 
 ## Sistema de coordenadas
 
 Todo el dominio trabaja exclusivamente en centímetros. Las dimensiones físicas son la fuente de verdad.
 
 ```text
-Plancha:    { width_cm: 55, height_cm: 100 }
+Plancha:    { width_cm: 60, height_cm: 100 }
 Diseno:     { width_cm: 27, height_cm: 30 }
 Placement:  { x_cm: 0, y_cm: 30 }
 ```
@@ -52,9 +52,11 @@ pixels = centimeters * (dpi / 2.54)
 Para exportación, `dpi = 300`.
 
 ```text
-55 cm  -> 6,496 px
+60 cm  -> 7,087 px
 100 cm -> 11,811 px
 ```
+
+La exportación redondea al entero más cercano (`round`, mitades positivas hacia arriba). El preview conserva decimales para mantener la proporción exacta; no reutiliza los píxeles de exportación para hacer packing. La salida 60 × 100 cm requiere 7087 × 11811 × 4 = 334 818 228 bytes de RGBA (aprox. 335 MB / 319 MiB), antes de buffers temporales. El PNG declara 11811 píxeles/metro en `pHYs`, la representación entera más cercana a 300 DPI.
 
 ## Transparencia y área visible
 
@@ -74,7 +76,7 @@ Ejemplo crítico:
 - Si el arte visible no es cuadrado, se ajusta proporcionalmente dentro de esa celda sin estirarse; el tamaño visible derivado puede ocupar menos ancho o alto.
 - Si el archivo fuente tiene padding transparente, ese padding no cambia la proporción del arte visible ni aumenta el tamaño visible derivado.
 
-Los límites visibles se detectan durante `v0-1-design-import` y se persisten como metadatos del diseño. Preview, packing y exportación consumen esos metadatos; no deben depender de padding transparente oculto en el archivo fuente.
+Los límites visibles se detectan al importar y se persisten como metadatos del diseño. Preview y exportación consumen esos metadatos; el packing reserva la celda solicitada y no lee píxeles ni archivos.
 
 ## Modelo TypeScript
 
@@ -173,7 +175,7 @@ Los códigos técnicos como `does_not_fit` o `invalid_format` son valores establ
 
 - `isPositiveIntegerCm` acepta solo centímetros enteros positivos.
 - `validateEditableDesignInput` exige nombre no vacío, dimensiones enteras positivas y `quantity >= 1`.
-- `validatePackingRequest` exige una plancha válida y al menos un diseño con `quantity > 0` antes de invocar packing.
+- `validatePackingRequest` exige plancha válida, diseños válidos y al menos un diseño; todas las cantidades son positivas.
 - `getFittedVisibleSizeCm` deriva el tamaño visible proporcional dentro de la celda solicitada sin modificar `DesignInput.widthCm` ni `DesignInput.heightCm`.
 
 ## Modelo Rust
@@ -188,12 +190,12 @@ enum ImageFormat { Png, Svg }
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct VisibleBounds {
-    x_px: u32,
-    y_px: u32,
-    width_px: u32,
-    height_px: u32,
-    source_width_px: u32,
-    source_height_px: u32,
+    x_px: f64,
+    y_px: f64,
+    width_px: f64,
+    height_px: f64,
+    source_width_px: f64,
+    source_height_px: f64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -236,4 +238,12 @@ struct Sheet {
 
 - `src/types/domain.ts` define los tipos de dominio del frontend.
 - `src-tauri/src/domain/design.rs` define los structs serializables del backend.
-- `src-tauri/src/domain/packing.rs` reserva el espacio para la implementación de packing.
+- `src-tauri/src/domain/packing.rs` implementa MaxRects determinista multipágina, cantidades y rotación por diseño.
+- `src-tauri/src/domain/assets.rs` valida los recursos con una política compartida. Los números de `VisibleBounds` se serializan como números JSON y deben ser enteros dentro de los límites de la fuente. SVG de tamaño intrínseco fraccionario se normaliza a un raster de dimensiones `ceil` antes de medir bounds.
+
+## Persistencia y límites operativos
+
+- `Job { version: 1, sheetConfig, designs }`: se guardan entradas, no layouts derivados. Los nombres pueden repetirse; los IDs no. El duplicado comparte ruta.
+- Assets: hasta 20 MiB, 32 millones de píxeles y 16384 píxeles por lado. PNG debe ser PNG real; SVG UTF-8 autocontenido, sin texto (convertir a trazados), imágenes anidadas/enlazadas, scripts, contenido HTML o patrones. Se limita también complejidad y memoria de capas/filtros SVG.
+- Exportación: hasta 100 millones de píxeles y 32768 píxeles por lado de raster destino. Estos límites protegen recursos; no fijan medidas de plancha.
+- Cambios de archivos se detectan por formato, geometría y límites visibles. No se mantiene hash: sustituir píxeles preservando exactamente los mismos bounds no se detecta como una edición.

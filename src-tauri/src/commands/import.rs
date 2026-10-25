@@ -1,4 +1,5 @@
-use crate::domain::design::{DesignInput, ImageFormat, VisibleBounds};
+use crate::domain::assets::{inspect_asset, EMPTY_ARTWORK_ERROR, MAX_ASSET_BYTES};
+use crate::domain::design::{DesignInput, ImageFormat};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 use uuid::Uuid;
@@ -51,118 +52,18 @@ fn detect_format(path: &Path) -> Result<ImageFormat, ImportError> {
     }
 }
 
-// ─── Visible bounds detection ────────────────────────────────────────────────
-
-/// Scan RGBA bytes for the bounding box of non-transparent pixels.
-/// `alpha_threshold`: minimum alpha value to count as visible.
-/// Returns `(min_x, min_y, max_x, max_y)` or `None` if all pixels are transparent.
-fn scan_alpha_bounds(
-    data: &[u8],
-    width: u32,
-    height: u32,
-    alpha_threshold: u8,
-) -> Option<(u32, u32, u32, u32)> {
-    let mut min_x = u32::MAX;
-    let mut min_y = u32::MAX;
-    let mut max_x = 0u32;
-    let mut max_y = 0u32;
-    let mut found = false;
-
-    for y in 0..height {
-        for x in 0..width {
-            let idx = ((y * width + x) * 4) as usize;
-            let alpha = data[idx + 3];
-            if alpha >= alpha_threshold {
-                if x < min_x {
-                    min_x = x;
-                }
-                if x > max_x {
-                    max_x = x;
-                }
-                if y < min_y {
-                    min_y = y;
-                }
-                if y > max_y {
-                    max_y = y;
-                }
-                found = true;
-            }
-        }
-    }
-
-    if found {
-        Some((min_x, min_y, max_x, max_y))
-    } else {
-        None
-    }
-}
-
-fn visible_bounds_from_rgba(
-    data: &[u8],
-    source_width: u32,
-    source_height: u32,
-    alpha_threshold: u8,
-) -> Result<VisibleBounds, ImportError> {
-    let bounds = scan_alpha_bounds(data, source_width, source_height, alpha_threshold)
-        .ok_or(ImportError::EmptyArtwork)?;
-
-    let (min_x, min_y, max_x, max_y) = bounds;
-    Ok(VisibleBounds {
-        x_px: min_x as f64,
-        y_px: min_y as f64,
-        width_px: (max_x - min_x + 1) as f64,
-        height_px: (max_y - min_y + 1) as f64,
-        source_width_px: source_width as f64,
-        source_height_px: source_height as f64,
-    })
-}
-
-/// Detect visible bounds for a PNG file.
-fn detect_png_bounds(path: &Path) -> Result<VisibleBounds, ImportError> {
-    let img = image::open(path)
-        .map_err(|_| ImportError::MetadataFailed)?
-        .into_rgba8();
-
-    let (width, height) = (img.width(), img.height());
-    let data = img.as_raw();
-    // PNG: alpha >= 3/255 — matches the SVG scan threshold; filters subpixel noise
-    visible_bounds_from_rgba(data, width, height, 3)
-}
-
-/// Detect visible bounds for an SVG file.
-/// Rasterizes the SVG using its intrinsic size (or viewBox as pixels), then scans alpha.
-fn detect_svg_bounds(path: &Path) -> Result<VisibleBounds, ImportError> {
-    let svg_data = std::fs::read(path).map_err(|err| match err.kind() {
-        std::io::ErrorKind::NotFound => ImportError::FileNotFound,
-        _ => ImportError::MetadataFailed,
-    })?;
-
-    let opt = resvg::usvg::Options::default();
-    let tree = resvg::usvg::Tree::from_data(&svg_data, &opt)
-        .map_err(|_| ImportError::MetadataFailed)?;
-
-    let svg_size = tree.size();
-    let width = svg_size.width().ceil() as u32;
-    let height = svg_size.height().ceil() as u32;
-
-    if width == 0 || height == 0 {
-        return Err(ImportError::EmptyArtwork);
-    }
-
-    let mut pixmap =
-        resvg::tiny_skia::Pixmap::new(width, height).ok_or(ImportError::MetadataFailed)?;
-
-    resvg::render(&tree, resvg::tiny_skia::Transform::identity(), &mut pixmap.as_mut());
-
-    let data = pixmap.data();
-    // SVG: alpha >= 3/255 to absorb rasterization anti-aliasing noise
-    visible_bounds_from_rgba(data, width, height, 3)
-}
-
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 fn validate_dimensions(width_cm: f64, height_cm: f64) -> Result<(), ImportError> {
-    if width_cm <= 0.0 || height_cm <= 0.0 || !width_cm.is_finite() || !height_cm.is_finite() {
+    if width_cm <= 0.0
+        || height_cm <= 0.0
+        || !width_cm.is_finite()
+        || !height_cm.is_finite()
+        || width_cm.fract() != 0.0
+        || height_cm.fract() != 0.0
+        || width_cm > u32::MAX as f64
+        || height_cm > u32::MAX as f64
+    {
         return Err(ImportError::InvalidDimensions);
     }
     Ok(())
@@ -188,12 +89,14 @@ pub fn import_design_into(
     }
 
     let format = detect_format(source)?;
-
     // Detect visible bounds before copying to avoid partial copy on empty/malformed files.
-    let visible_bounds = match format {
-        ImageFormat::Png => detect_png_bounds(source),
-        ImageFormat::Svg => detect_svg_bounds(source),
-    }?;
+    let visible_bounds = inspect_asset(source, &format).map_err(|message| {
+        if message == EMPTY_ARTWORK_ERROR {
+            ImportError::EmptyArtwork
+        } else {
+            ImportError::MetadataFailed
+        }
+    })?;
 
     let original_aspect_ratio = visible_bounds.width_px / visible_bounds.height_px;
 
@@ -208,16 +111,43 @@ pub fn import_design_into(
     let file_name = format!("{}.{}", Uuid::new_v4(), ext);
     let dest_path = assets_dir.join(&file_name);
 
-    if let Err(_) = std::fs::copy(source, &dest_path) {
-        // Clean up any partial copy.
+    let mut destination = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&dest_path)
+        .map_err(|_| ImportError::CopyFailed)?;
+    let copy_result = (|| {
+        use std::io::Read;
+        let input = std::fs::File::open(source).map_err(|_| ImportError::CopyFailed)?;
+        let copied = std::io::copy(&mut input.take(MAX_ASSET_BYTES + 1), &mut destination)
+            .map_err(|_| ImportError::CopyFailed)?;
+        if copied > MAX_ASSET_BYTES {
+            return Err(ImportError::MetadataFailed);
+        }
+        Ok(())
+    })();
+    drop(destination);
+    // Check the copied bytes too, so a changing source cannot introduce a
+    // corrupt/oversized asset between inspection and copy.
+    let copy_result = copy_result.and_then(|_| {
+        let copied_bounds =
+            inspect_asset(&dest_path, &format).map_err(|_| ImportError::MetadataFailed)?;
+        if copied_bounds != visible_bounds {
+            return Err(ImportError::MetadataFailed);
+        }
+        Ok(())
+    });
+    if let Err(error) = copy_result {
+        // Only our create_new destination is removed, never a user asset.
         let _ = std::fs::remove_file(&dest_path);
-        return Err(ImportError::CopyFailed);
+        return Err(error);
     }
 
     let name = source
         .file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("design")
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or("Diseño")
         .to_string();
 
     let image_path = dest_path.to_string_lossy().into_owned();
@@ -238,7 +168,7 @@ pub fn import_design_into(
 
 // ─── Tauri command (thin wrapper that resolves app_data_dir) ─────────────────
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_design(
     app: tauri::AppHandle,
     source_path: String,
@@ -261,6 +191,63 @@ mod tests {
     use super::*;
     use image::{ImageBuffer, RgbaImage};
     use std::io::Write;
+
+    #[test]
+    fn shared_svg_policy_maps_unsupported_content_to_stable_metadata_error() {
+        let dir = temp_dir();
+        for content in [
+            "<rect width='5' height='5'/><text>Hola</text>",
+            "<image href='data:image/png;base64,AAAA' width='5' height='5'/>",
+            "<foreignObject width='5' height='5'/>",
+        ] {
+            let source = dir.join("unsupported.svg");
+            std::fs::write(&source, format!("<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'>{content}</svg>")).unwrap();
+            let error = import_design_into(&dir, source.to_str().unwrap(), 5.0, 5.0).unwrap_err();
+            assert_eq!(error, ImportError::MetadataFailed);
+            assert!(!dir.join("design-assets").exists());
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn shared_source_byte_policy_rejects_png_and_svg_without_copying() {
+        let dir = temp_dir();
+        for name in ["large.png", "large.svg"] {
+            let path = dir.join(name);
+            std::fs::File::create(&path)
+                .unwrap()
+                .set_len(crate::domain::assets::MAX_ASSET_BYTES + 1)
+                .unwrap();
+            assert_eq!(
+                import_design_into(&dir, path.to_str().unwrap(), 5.0, 5.0).unwrap_err(),
+                ImportError::MetadataFailed
+            );
+            assert!(!dir.join("design-assets").exists());
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn physical_dimensions_reject_fractional_and_non_finite_values() {
+        for value in [
+            0.0,
+            -1.0,
+            1.5,
+            f64::INFINITY,
+            f64::NAN,
+            u32::MAX as f64 + 1.0,
+        ] {
+            assert_eq!(
+                validate_dimensions(value, 10.0),
+                Err(ImportError::InvalidDimensions)
+            );
+            assert_eq!(
+                validate_dimensions(10.0, value),
+                Err(ImportError::InvalidDimensions)
+            );
+        }
+        assert_eq!(validate_dimensions(60.0, 100.0), Ok(()));
+    }
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -318,13 +305,19 @@ mod tests {
         create_padded_png(&png);
 
         let dest = temp_dir();
-        let result = import_design_into(&dest, png.to_str().unwrap(), 10.0, 8.0)
-            .expect("import succeeds");
+        let result =
+            import_design_into(&dest, png.to_str().unwrap(), 10.0, 8.0).expect("import succeeds");
 
         let vb = &result.visible_bounds;
         // The red area starts at x=1, y=1 and is 8×8, so bounds should NOT be the full 10×10.
-        assert_eq!(vb.x_px, 1.0, "visible x starts after 1px transparent border");
-        assert_eq!(vb.y_px, 1.0, "visible y starts after 1px transparent border");
+        assert_eq!(
+            vb.x_px, 1.0,
+            "visible x starts after 1px transparent border"
+        );
+        assert_eq!(
+            vb.y_px, 1.0,
+            "visible y starts after 1px transparent border"
+        );
         assert_eq!(vb.width_px, 8.0, "visible width excludes padding");
         assert_eq!(vb.height_px, 8.0, "visible height excludes padding");
         assert_eq!(vb.source_width_px, 10.0, "source width is full image");
@@ -458,8 +451,14 @@ mod tests {
 
         let vb = &result.visible_bounds;
         // The red rect is at x=5..15, y=5..15 in a 20×20 SVG.
-        assert_eq!(vb.source_width_px, 20.0, "source width is SVG intrinsic width");
-        assert_eq!(vb.source_height_px, 20.0, "source height is SVG intrinsic height");
+        assert_eq!(
+            vb.source_width_px, 20.0,
+            "source width is SVG intrinsic width"
+        );
+        assert_eq!(
+            vb.source_height_px, 20.0,
+            "source height is SVG intrinsic height"
+        );
         // Visible content starts at x=5, y=5 and is 10×10.
         assert_eq!(vb.x_px, 5.0, "SVG visible x starts at rect position");
         assert_eq!(vb.y_px, 5.0, "SVG visible y starts at rect position");
@@ -548,7 +547,10 @@ mod tests {
         } else {
             0
         };
-        assert_eq!(orphan_count, 0, "no orphan copy should exist after failed import");
+        assert_eq!(
+            orphan_count, 0,
+            "no orphan copy should exist after failed import"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
         std::fs::remove_dir_all(&dest).ok();
@@ -583,8 +585,15 @@ mod tests {
 
         let value = serde_json::to_value(&design).expect("serializes");
 
-        assert_eq!(value["format"], json!("png"), "format key must be camelCase");
-        assert!(value.get("visibleBounds").is_some(), "visibleBounds key must be present");
+        assert_eq!(
+            value["format"],
+            json!("png"),
+            "format key must be camelCase"
+        );
+        assert!(
+            value.get("visibleBounds").is_some(),
+            "visibleBounds key must be present"
+        );
         assert_eq!(
             value["visibleBounds"]["xPx"],
             json!(1.0),
@@ -612,7 +621,10 @@ mod tests {
     #[test]
     fn import_error_codes_match_stable_contract() {
         assert_eq!(ImportError::InvalidFormat.as_str(), "invalid_format");
-        assert_eq!(ImportError::InvalidDimensions.as_str(), "invalid_dimensions");
+        assert_eq!(
+            ImportError::InvalidDimensions.as_str(),
+            "invalid_dimensions"
+        );
         assert_eq!(ImportError::FileNotFound.as_str(), "file_not_found");
         assert_eq!(ImportError::CopyFailed.as_str(), "copy_failed");
         assert_eq!(ImportError::EmptyArtwork.as_str(), "empty_artwork");

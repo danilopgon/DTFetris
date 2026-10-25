@@ -25,8 +25,4 @@ Se elige una implementación propia pequeña y sin dependencias adicionales de *
 
 Tests unitarios en `domain/packing.rs`: ajuste exacto, mosaico completo, imposibles, rotación permitida/bloqueada, multipágina, cantidades, límites, dimensiones no finitas/decimales/fuera de rango, petición vacía, cero mixto, IDs duplicados/blancos y serialización. Ochenta fixtures pseudoaleatorios reproducibles verifican límites, ausencia de solapamientos, orientación, conservación de copias y JSON idéntico al repetir/invertir/rotar la lista de diseños. El comando tiene tests de resultado real y rechazo de petición inválida.
 
-El agente integrador debe reflejar estas reglas y cobertura en `domain-and-data-model.md`, `packing-and-export.md` y `testing-strategy.md`: esos archivos están fuera de la propiedad de este cambio delegado.
-
-Evidencia ejecutada: `cargo test` desde `src-tauri` pasó 30 tests (incluidos los del comando y los fixtures), sin fallos.
-
-Tras cambios concurrentes de Tauri/exportación, `cargo test` sin features quedó bloqueado por la exigencia de `protocol-asset` de la configuración. `cargo test --features tauri/protocol-asset packing` pasó los **15 tests de packing**. La suite completa con esa feature pasó 38/39 tests en esa revisión; el fallo restante fue externo a este cambio, `commands::export::tests::allocation_guard_allows_sixty_by_one_hundred_but_rejects_excess` (334818228 frente a 334823028 bytes).
+Las reglas y cobertura están integradas en `domain-and-data-model.md`, `packing-and-export.md` y `testing-strategy.md`. Evidencia final: `cargo test` pasa 63 tests del producto, incluidos los 15 tests de packing. Ver [roadmap.md](./roadmap.md) para la verificación completa.

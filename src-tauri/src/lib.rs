@@ -1,6 +1,9 @@
 mod commands;
 mod domain;
 
+#[cfg(test)]
+mod ipc_tests;
+
 use commands::{
     export::export_png,
     import::import_design,
