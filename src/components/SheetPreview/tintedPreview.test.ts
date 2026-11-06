@@ -92,12 +92,29 @@ describe('getPreviewCrop', () => {
     expect(crop).toEqual({ x: 2, y: 0, width: 10, height: 10 })
   })
 
-  it('scales larger tinted canvases uniformly', () => {
+  it('scales larger sources uniformly', () => {
     expect(getPreviewCrop(bounds, { width: 22, height: 20 })).toEqual({
       x: 4,
       y: 0,
       width: 20,
       height: 20,
     })
+  })
+
+  it('maps a tinted thumbnail per axis after its independent rounding', () => {
+    // Regression (PR review): 1000 × 101 PNG with a 10 × 10 logo at (900, 40) tinted to 512 × 52.
+    const logo = {
+      xPx: 900,
+      yPx: 40,
+      widthPx: 10,
+      heightPx: 10,
+      sourceWidthPx: 1000,
+      sourceHeightPx: 101,
+    }
+    const crop = getPreviewCrop(logo, { width: 1000, height: 101 }, { width: 512, height: 52 })
+    expect(crop.x).toBeCloseTo(460.8)
+    expect(crop.width).toBeCloseTo(5.12)
+    expect(crop.y).toBeCloseTo((40 * 52) / 101)
+    expect(crop.height).toBeCloseTo((10 * 52) / 101)
   })
 })

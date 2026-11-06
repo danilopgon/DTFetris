@@ -59,19 +59,27 @@ type CropBounds = {
 }
 
 /**
- * Maps persisted visible bounds to the preview source with one uniform factor. Bounds live
- * in an integer raster scaled uniformly from the source (SVG viewports such as 10.1 × 10 →
- * 11 × 10 keep scale 1), so per-axis factors would stretch the crop.
+ * Maps persisted visible bounds to the drawn preview source in two steps:
+ * 1. metadata raster → original image units with ONE uniform factor (bounds are measured
+ *    in an integer raster scaled uniformly, e.g. a 10.1 × 10 SVG in an 11 × 10 raster);
+ * 2. original units → the drawn source per axis, because tinted thumbnails round width
+ *    and height independently (1000 × 101 → 512 × 52).
  */
-export function getPreviewCrop(bounds: CropBounds, sourceSize: { width: number; height: number }) {
-  const factor = Math.max(
-    sourceSize.width / bounds.sourceWidthPx,
-    sourceSize.height / bounds.sourceHeightPx,
+export function getPreviewCrop(
+  bounds: CropBounds,
+  natural: { width: number; height: number },
+  drawn: { width: number; height: number } = natural,
+) {
+  const toUnits = Math.max(
+    natural.width / bounds.sourceWidthPx,
+    natural.height / bounds.sourceHeightPx,
   )
+  const sx = (toUnits * drawn.width) / natural.width
+  const sy = (toUnits * drawn.height) / natural.height
   return {
-    x: bounds.xPx * factor,
-    y: bounds.yPx * factor,
-    width: bounds.widthPx * factor,
-    height: bounds.heightPx * factor,
+    x: bounds.xPx * sx,
+    y: bounds.yPx * sy,
+    width: bounds.widthPx * sx,
+    height: bounds.heightPx * sy,
   }
 }

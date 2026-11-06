@@ -25,7 +25,7 @@ Escenario: PNG 2:1 con padding/agujero transparentes y SVG sintéticos generados
 - la composición física en el PNG: componentes conexos con alpha > 0 (los fragmentos contenidos en la caja de otro, como el halo de remuestreo en un agujero, cuentan como parte de ese diseño), tamaños de bbox visibles de 8 cm = 945 px, número de logos rotados y separación mínima entre cajas ≥ 117 px (10 mm = 118,1 px);
 - ausencia de errores de consola, de página y de red.
 
-`design-assets` no se puede redirigir, porque Tauri lo resuelve con la API del Shell, no con `APPDATA`. La prueba registra SHA-256 de los archivos previos, elimina solo las copias que añadió y falla si alguno preexistente cambia. Capturas, `resultado.json` y `registro.log` quedan en `%TEMP%\dtfetris-native-*`. Abre ventanas y diálogos en el escritorio: no usar el ratón durante la ejecución (≈1 min). No sustituye la aprobación visual ni la prueba física en el RIP.
+`design-assets` no se puede redirigir, porque Tauri lo resuelve con la API del Shell, no con `APPDATA`. La prueba registra SHA-256 de los archivos previos y elimina **solo** los assets que referencia el trabajo JSON que ella misma guardó. Otro archivo nuevo, como una importación real simultánea por MCP o desde la UI, se informa y no se toca. Si la prueba falla antes de guardar, no borra nada. Falla si algún archivo preexistente cambia. Capturas, `resultado.json` y `registro.log` quedan en `%TEMP%\dtfetris-native-*`. Abre ventanas y diálogos en el escritorio: no usar el ratón durante la ejecución (≈1 min). No sustituye la aprobación visual ni la prueba física en el RIP.
 
 Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDriver para una aplicación nativa; la prueba nativa usa CDP sobre WebView2, no el esquema de Tauri. La configuración E2E sirve Vite en HTTP. El test web incluye una referencia visual Windows deliberadamente revisada; en otros sistemas habrá que generar y revisar su snapshot de plataforma, no aceptarlo automáticamente. El backend de impresión se verifica con PNG reales en Rust, separado de los mocks web.
 
@@ -69,7 +69,9 @@ Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDr
 
 ### SVG con viewport fraccionario
 
-- Regresión de la revisión de la PR: un cuadrado de 10 × 10 en un viewport de 10,1 × 10 conserva la proporción 1 al importar y se exporta igual de ancho que de alto. La vista previa recorta con un factor uniforme (`getPreviewCrop`).
+- Regresión de la revisión de la PR: un cuadrado de 10 × 10 en un viewport de 10,1 × 10 conserva la proporción 1 al importar y se exporta igual de ancho que de alto.
+- La vista previa (`getPreviewCrop`) pasa de bounds a unidades del original con un factor uniforme y de ahí a la miniatura por eje. Regresión: un logo en una miniatura coloreada redondeada por eje (1000 × 101 → 512 × 52) no se desplaza.
+- Packing: el ruido de coma flotante en un límite exacto (15,000000000000002 cm) no añade una unidad y no rechaza un diseño que cabe justo.
 
 ### Color único
 

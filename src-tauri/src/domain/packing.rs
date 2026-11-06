@@ -25,8 +25,16 @@ pub fn validate_gap_cm(gap: Option<f64>) -> Result<f64, String> {
 
 pub const CM_QUANTUM: f64 = 0.0001;
 const UNITS_PER_CM: f64 = 10_000.0;
+/// Rounds outward to the physical quantum, but first absorbs floating-point noise at an
+/// exact quantum boundary: 15.000000000000002 cm must stay 150000 units, not 150001.
 fn ceil_units(cm: f64) -> u64 {
-    (cm * UNITS_PER_CM).ceil() as u64
+    let units = cm * UNITS_PER_CM;
+    let nearest = units.round();
+    if (units - nearest).abs() <= 1e-6_f64.max(nearest * 1e-12) {
+        nearest as u64
+    } else {
+        units.ceil() as u64
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -394,6 +402,29 @@ mod tests {
             can_rotate: rotate,
             ..valid_design(quantity)
         }
+    }
+
+    #[test]
+    fn floating_point_noise_does_not_reject_an_exact_fit() {
+        // Regression (PR review): 110 × 150 px at maximum 11 × 16 cm fits to
+        // 11 × 15.000000000000002 cm, which must still fit an 11 × 15 cm sheet.
+        let mut d = design("exact", 110.0, 150.0, 1, true);
+        d.width_cm = 11.0;
+        d.height_cm = 16.0;
+        let (_, h) = crate::domain::design::fitted_visible_size_cm(&d).unwrap();
+        assert!(h > 15.0, "the noisy value this test guards against: {h}");
+        let mut r = request(11.0, 15.0, vec![d]);
+        r.sheet.gap_cm = Some(0.3);
+        let packed = pack(&r).unwrap();
+        assert!(
+            packed.unplaced_items.is_empty(),
+            "{:?}",
+            packed.unplaced_items
+        );
+        assert_eq!(packed.sheets.len(), 1);
+        // Genuinely fractional sizes still round outward.
+        assert_eq!(super::ceil_units(15.00001), 150001);
+        assert_eq!(super::ceil_units(15.000000000000002), 150000);
     }
 
     #[test]

@@ -153,7 +153,11 @@ export default function SheetPreview() {
                                 y={0}
                                 width={fitted.widthCm * scale}
                                 height={fitted.heightCm * scale}
-                                crop={getPreviewCrop(bounds, sourceSize)}
+                                crop={getPreviewCrop(
+                                  bounds,
+                                  getPreviewSourceSize(images[design.imagePath] ?? image),
+                                  sourceSize,
+                                )}
                               />
                             </Group>
                           )}

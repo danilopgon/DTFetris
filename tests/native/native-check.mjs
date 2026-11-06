@@ -499,19 +499,33 @@ async function main() {
   } finally {
     for (const app of launched) if (!app.isExited()) app.child.kill()
     await sleep(500)
-    // design-assets cannot be redirected (Tauri resolves it through the Shell API), so only
-    // the copies this run added are removed; pre-existing files must stay untouched.
+    // design-assets cannot be redirected (Tauri resolves it through the Shell API). Only the
+    // assets referenced by the job this run saved are ours: a concurrent MCP or UI import of
+    // a real design may also appear meanwhile, and it must never be deleted.
     const after = manifest()
-    created = [...after.keys()].filter((name) => !before.has(name))
+    const newFiles = [...after.keys()].filter((name) => !before.has(name))
+    const owned = new Set()
+    try {
+      const saved = JSON.parse(fs.readFileSync(path.join(out, 'trabajo.json'), 'utf8'))
+      for (const d of saved.designs) {
+        const file = path.resolve(d.imagePath.replace(/^\\\\\?\\/, ''))
+        if (path.dirname(file) === path.resolve(assetsDir)) owned.add(path.basename(file))
+      }
+    } catch {
+      // No saved job (early failure): ownership is unknown, so nothing is deleted.
+    }
+    created = newFiles.filter((name) => owned.has(name))
+    const leftUntouched = newFiles.filter((name) => !owned.has(name))
     const changed = [...before.keys()].filter((name) => after.get(name) !== before.get(name))
     for (const name of created) fs.rmSync(path.join(assetsDir, name))
     results.assets = {
       before: before.size,
       createdAndRemoved: created,
+      newButNotOwnedLeftUntouched: leftUntouched,
       preexistingChanged: changed,
     }
     note(
-      `design-assets: ${created.length} copias de la prueba eliminadas; preexistentes alterados: ${changed.length}`,
+      `design-assets: ${created.length} copias de la prueba eliminadas; nuevas ajenas sin tocar: ${leftUntouched.length}; preexistentes alterados: ${changed.length}`,
     )
     if (changed.length) results.ok = false
     fs.writeFileSync(path.join(run, 'resultado.json'), JSON.stringify(results, null, 2))
