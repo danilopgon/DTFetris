@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createTintedPreviewCache } from './tintedPreview'
+import { createTintedPreviewCache, getPreviewCrop } from './tintedPreview'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -63,5 +63,41 @@ describe('preview-only color cache', () => {
     expect(getPreview(image, '#FF0000')).toBe(red)
     expect(getPreview(makeImage(), '#FF0000')).not.toBe(red)
     expect(getPreview(image, '#0000FF')).not.toBe(blue)
+  })
+})
+
+describe('getPreviewCrop', () => {
+  const bounds = {
+    xPx: 2,
+    yPx: 0,
+    widthPx: 10,
+    heightPx: 10,
+    sourceWidthPx: 11,
+    sourceHeightPx: 10,
+  }
+
+  it('keeps PNG bounds when the source is the persisted raster', () => {
+    expect(getPreviewCrop(bounds, { width: 11, height: 10 })).toEqual({
+      x: 2,
+      y: 0,
+      width: 10,
+      height: 10,
+    })
+  })
+
+  it('uses one uniform factor for a fractional SVG viewport instead of stretching per axis', () => {
+    // 10.1 × 10 SVG measured in an 11 × 10 raster at uniform scale 1: the square stays square.
+    const crop = getPreviewCrop(bounds, { width: 10.1, height: 10 })
+    expect(crop.width).toBe(crop.height)
+    expect(crop).toEqual({ x: 2, y: 0, width: 10, height: 10 })
+  })
+
+  it('scales larger tinted canvases uniformly', () => {
+    expect(getPreviewCrop(bounds, { width: 22, height: 20 })).toEqual({
+      x: 4,
+      y: 0,
+      width: 20,
+      height: 20,
+    })
   })
 })

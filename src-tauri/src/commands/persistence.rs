@@ -562,11 +562,11 @@ mod tests {
             (bounds.source_width_px, bounds.source_height_px),
             (13.0, 8.0)
         );
-        // The normalized narrow edge extends into the last raster column/row;
-        // identity rasterization would also include column 11 and row 6.
+        // Uniform scale min(13/12.5, 8/7.5) = 1.04: the rect spans x 12.01–12.95 (column 12)
+        // and y 6.86–7.75 (rows 6–7), without the old extra vertical stretch.
         assert_eq!(
             (bounds.x_px, bounds.y_px, bounds.width_px, bounds.height_px),
-            (12.0, 7.0, 1.0, 1.0)
+            (12.0, 6.0, 1.0, 2.0)
         );
         let job = Job {
             version: 1,

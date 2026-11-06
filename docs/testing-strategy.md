@@ -67,6 +67,10 @@ Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDr
 - Preview por plancha, recorte normalizado, rotación, imagen ausente y callback obsoleto.
 - Área visible y reservada diferenciadas; métricas por hoja/globales.
 
+### SVG con viewport fraccionario
+
+- Regresión de la revisión de la PR: un cuadrado de 10 × 10 en un viewport de 10,1 × 10 conserva la proporción 1 al importar y se exporta igual de ancho que de alto. La vista previa recorta con un factor uniforme (`getPreviewCrop`).
+
 ### Color único
 
 - Validación estricta `#RRGGBB` en TS/Rust; ausente/null mantiene originales. Se rechazan abreviaturas, nombres y hex con alpha.

@@ -48,3 +48,30 @@ export function getPreviewSourceSize(source: PreviewSource) {
     ? { width: source.width, height: source.height }
     : { width: source.naturalWidth, height: source.naturalHeight }
 }
+
+type CropBounds = {
+  xPx: number
+  yPx: number
+  widthPx: number
+  heightPx: number
+  sourceWidthPx: number
+  sourceHeightPx: number
+}
+
+/**
+ * Maps persisted visible bounds to the preview source with one uniform factor. Bounds live
+ * in an integer raster scaled uniformly from the source (SVG viewports such as 10.1 × 10 →
+ * 11 × 10 keep scale 1), so per-axis factors would stretch the crop.
+ */
+export function getPreviewCrop(bounds: CropBounds, sourceSize: { width: number; height: number }) {
+  const factor = Math.max(
+    sourceSize.width / bounds.sourceWidthPx,
+    sourceSize.height / bounds.sourceHeightPx,
+  )
+  return {
+    x: bounds.xPx * factor,
+    y: bounds.yPx * factor,
+    width: bounds.widthPx * factor,
+    height: bounds.heightPx * factor,
+  }
+}

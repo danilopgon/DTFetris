@@ -367,6 +367,17 @@ fn check_css_resources(value: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Integer raster where SVG visible bounds are measured, and the **uniform** scale from SVG
+/// units to it. Separate X/Y scales would stretch fractional viewports (10.1 × 10 → 11 × 10)
+/// and persist a deformed aspect ratio. Integer-sized SVGs keep scale 1, so existing jobs
+/// keep their bounds. Export and preview divide bounds by this scale to get SVG units.
+pub fn svg_metadata_raster(tree: &resvg::usvg::Tree) -> (u32, u32, f32) {
+    let (w, h) = (tree.size().width(), tree.size().height());
+    let (width, height) = (w.ceil() as u32, h.ceil() as u32);
+    let scale = (width as f32 / w).min(height as f32 / h);
+    (width, height, scale)
+}
+
 /// Read and rescan a real PNG/SVG, never copying files or trusting JSON metadata.
 /// Paths may be relative during import; persistence enforces absolute paths.
 pub fn inspect_asset(path: &Path, format: &ImageFormat) -> Result<VisibleBounds, String> {
@@ -389,18 +400,13 @@ pub fn inspect_asset(path: &Path, format: &ImageFormat) -> Result<VisibleBounds,
         }
         ImageFormat::Svg => {
             let tree = parse_svg(&bytes)?;
-            let width = tree.size().width().ceil() as u32;
-            let height = tree.size().height().ceil() as u32;
+            let (width, height, scale) = svg_metadata_raster(&tree);
             let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
                 .ok_or_else(|| "No hay memoria suficiente para validar el SVG.".to_string())?;
-            // Normalize the fractional intrinsic viewport to the integer metadata
-            // raster. Preview/export map persisted bounds back proportionally.
-            let scale_x = width as f32 / tree.size().width();
-            let scale_y = height as f32 / tree.size().height();
-            validate_svg_tree_at_scale(&tree, scale_x, scale_y)?;
+            validate_svg_tree_at_scale(&tree, scale, scale)?;
             resvg::render(
                 &tree,
-                resvg::tiny_skia::Transform::from_scale(scale_x, scale_y),
+                resvg::tiny_skia::Transform::from_scale(scale, scale),
                 &mut pixmap.as_mut(),
             );
             scan_bounds(pixmap.data(), width, height)
@@ -571,7 +577,7 @@ mod tests {
     }
 
     #[test]
-    fn fractional_svg_uses_normalized_integer_raster() {
+    fn fractional_svg_uses_integer_raster_with_uniform_scale() {
         let f = Fixture::new();
         let path = f.0.join("fractional.svg");
         fs::write(&path, b"<svg xmlns='http://www.w3.org/2000/svg' width='12.5' height='7.5'><rect x='11.55' y='6.6' width='.9' height='.85' fill='red'/></svg>").unwrap();
@@ -582,7 +588,7 @@ mod tests {
         );
         assert_eq!(
             (bounds.x_px, bounds.y_px, bounds.width_px, bounds.height_px),
-            (12.0, 7.0, 1.0, 1.0)
+            (12.0, 6.0, 1.0, 2.0)
         );
     }
 }

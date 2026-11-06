@@ -38,7 +38,7 @@ Se redondea al entero más cercano, mitades positivas hacia arriba. El preview c
 1. Validar IDs, cantidades completas, placements, rotación, dimensiones visibles ajustadas, límites y separación declarada.
 2. Reinspeccionar fuentes y comparar geometría/bounds persistidos. Recursos tienen una política acotada compartida.
 3. PNG: recortar padding, remuestrear en alpha premultiplicado para evitar halos de RGB invisible y volver a RGBA recto.
-4. SVG: rasterizar directamente a la resolución final usando bounds normalizados; comprobar memoria de capas a esa escala y convertir alpha premultiplicado de tiny-skia a recto.
+4. SVG: rasterizar directamente a la resolución final usando los bounds medidos con escala uniforme (`svg_metadata_raster`), sin deformar viewports fraccionarios; comprobar memoria de capas a esa escala y convertir alpha premultiplicado de tiny-skia a recto.
 5. Si existe `colorOverride`, sustituir RGB después de remuestrear sin cambiar alpha ni fuente.
 6. Aplicar rotación de 90° si corresponde y componer dentro del bbox visible colocado. Solo se centra la holgura micrométrica de redondeo, no el rectángulo máximo original.
 7. Escribir PNG RGBA con densidad `pHYs`, una plancha por iteración.

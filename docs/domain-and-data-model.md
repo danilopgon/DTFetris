@@ -255,7 +255,7 @@ struct Sheet {
 - `src/types/domain.ts` define los tipos de dominio del frontend.
 - `src-tauri/src/domain/design.rs` define los structs serializables del backend.
 - `src-tauri/src/domain/packing.rs` implementa MaxRects determinista multipágina, cantidades y rotación por diseño.
-- `src-tauri/src/domain/assets.rs` valida los recursos con una política compartida. Los números de `VisibleBounds` se serializan como números JSON y deben ser enteros dentro de los límites de la fuente. SVG de tamaño intrínseco fraccionario se normaliza a un raster de dimensiones `ceil` antes de medir bounds.
+- `src-tauri/src/domain/assets.rs` valida los recursos con una política compartida. Los números de `VisibleBounds` se serializan como números JSON y deben ser enteros dentro de los límites de la fuente. SVG de tamaño intrínseco fraccionario se mide en un raster de dimensiones `ceil` con **una sola escala uniforme** `min(ceil(W)/W, ceil(H)/H)` (`svg_metadata_raster`). Escalas separadas por eje deformarían la proporción: un 10,1 × 10 pasaría a 11 × 10. Los SVG de medidas enteras usan escala 1, así que los trabajos existentes conservan sus bounds. Exportación y vista previa recalculan la misma escala para volver a coordenadas del SVG.
 
 ## Persistencia y límites operativos
 

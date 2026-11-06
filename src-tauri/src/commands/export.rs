@@ -1,4 +1,6 @@
-use crate::domain::assets::{inspect_asset, parse_svg, read_asset, validate_svg_tree_at_scale};
+use crate::domain::assets::{
+    inspect_asset, parse_svg, read_asset, svg_metadata_raster, validate_svg_tree_at_scale,
+};
 use crate::domain::design::{
     fitted_visible_size_cm, parse_color_override, DesignInput, ImageFormat, Placement, Sheet,
 };
@@ -228,19 +230,18 @@ fn artwork(d: &DesignInput, width: u32, height: u32) -> Result<RgbaImage, String
         }
         ImageFormat::Svg => {
             let tree = parse_svg(&data)?;
-            if tree.size().width().ceil() as u32 != b.source_width_px as u32
-                || tree.size().height().ceil() as u32 != b.source_height_px as u32
-            {
+            let (raster_w, raster_h, scale) = svg_metadata_raster(&tree);
+            if raster_w != b.source_width_px as u32 || raster_h != b.source_height_px as u32 {
                 return Err("El SVG no coincide con sus dimensiones persistidas.".into());
             }
-            // Persisted bounds are normalized source coordinates. Render only that
-            // window directly at export resolution, never an import-sized bitmap.
-            let sx = width as f32
-                / (b.width_px / b.source_width_px * f64::from(tree.size().width())) as f32;
-            let sy = height as f32
-                / (b.height_px / b.source_height_px * f64::from(tree.size().height())) as f32;
-            let tx = -(b.x_px / b.width_px * f64::from(width)) as f32;
-            let ty = -(b.y_px / b.height_px * f64::from(height)) as f32;
+            // Persisted bounds live in the uniformly scaled metadata raster. Render only
+            // that window directly at export resolution, never an import-sized bitmap.
+            let kx = f64::from(width) / b.width_px;
+            let ky = f64::from(height) / b.height_px;
+            let sx = (f64::from(scale) * kx) as f32;
+            let sy = (f64::from(scale) * ky) as f32;
+            let tx = -(b.x_px * kx) as f32;
+            let ty = -(b.y_px * ky) as f32;
             validate_svg_tree_at_scale(&tree, sx, sy)?;
             let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
                 .ok_or("No hay memoria para rasterizar el SVG.")?;
@@ -513,6 +514,39 @@ mod tests {
         invalid = packed.sheets.clone();
         invalid[0].placements[0].height_cm -= CM_QUANTUM;
         assert!(validate(&invalid, &[d]).is_err());
+    }
+
+    #[test]
+    fn fractional_viewport_svg_keeps_its_proportions_on_import_and_export() {
+        // Regression (PR review): a 10 × 10 square in a 10.1 × 10 viewport used to be
+        // scanned into an 11 × 10 raster and printed 10 % wider than tall.
+        let f = Fixture::new();
+        let source = f.0.join("square.svg");
+        fs::write(&source, r#"<svg xmlns="http://www.w3.org/2000/svg" width="10.1" height="10"><rect width="10" height="10" fill="blue"/></svg>"#).unwrap();
+        let d = import_design_into(&f.0, source.to_str().unwrap(), 4.0, 4.0).unwrap();
+        assert_eq!(d.original_aspect_ratio, 1.0);
+        assert_eq!(fitted_visible_size_cm(&d).unwrap(), (4.0, 4.0));
+        let s = Sheet {
+            width_cm: 6.0,
+            height_cm: 6.0,
+            ..sheet(&d)
+        };
+        let paths = export(&f, &[s], &[d]).unwrap();
+        let output = image::open(&paths[0]).unwrap().into_rgba8();
+        // The printed square is as wide as it is tall (within one pixel of rounding).
+        let opaque_row = |y: u32| {
+            (0..output.width())
+                .filter(|&x| output.get_pixel(x, y)[3] == 255)
+                .count()
+        };
+        let opaque_col = |x: u32| {
+            (0..output.height())
+                .filter(|&y| output.get_pixel(x, y)[3] == 255)
+                .count()
+        };
+        let (w, h) = (opaque_row(cm_px(3.0)), opaque_col(cm_px(3.0)));
+        assert!(w.abs_diff(h) <= 1, "{w} x {h}");
+        assert!(w.abs_diff(cm_px(4.0) as usize) <= 1, "{w}");
     }
 
     #[test]

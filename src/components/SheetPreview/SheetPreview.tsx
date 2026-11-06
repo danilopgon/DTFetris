@@ -3,7 +3,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Group, Image as KonvaImage, Layer, Rect, Stage } from 'react-konva'
 import { useAppStore } from '../../store/useAppStore'
 import { getFittedVisibleSizeCm } from '../../types/domain'
-import { createTintedPreviewCache, getPreviewSourceSize, type PreviewSource } from './tintedPreview'
+import {
+  createTintedPreviewCache,
+  getPreviewCrop,
+  getPreviewSourceSize,
+  type PreviewSource,
+} from './tintedPreview'
 
 export default function SheetPreview() {
   const sheets = useAppStore((s) => s.sheets)
@@ -148,13 +153,7 @@ export default function SheetPreview() {
                                 y={0}
                                 width={fitted.widthCm * scale}
                                 height={fitted.heightCm * scale}
-                                crop={{
-                                  x: (bounds.xPx * sourceSize.width) / bounds.sourceWidthPx,
-                                  y: (bounds.yPx * sourceSize.height) / bounds.sourceHeightPx,
-                                  width: (bounds.widthPx * sourceSize.width) / bounds.sourceWidthPx,
-                                  height:
-                                    (bounds.heightPx * sourceSize.height) / bounds.sourceHeightPx,
-                                }}
+                                crop={getPreviewCrop(bounds, sourceSize)}
                               />
                             </Group>
                           )}
