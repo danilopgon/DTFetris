@@ -48,20 +48,60 @@ pub fn check_raster_size(width: u32, height: u32) -> Result<(), String> {
     Ok(())
 }
 
-/// Decodes a PNG under the shared raster limits. Callers read bytes with `read_asset`.
+/// Reads a whole file refusing more than `limit` bytes, for sources other than designs.
+pub fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
+    let file = File::open(path).map_err(|_| "No se pudo abrir el archivo.".to_string())?;
+    let too_big = format!(
+        "El archivo no es válido o supera el límite de {} MiB.",
+        limit / (1024 * 1024)
+    );
+    if !file
+        .metadata()
+        .is_ok_and(|m| m.is_file() && m.len() <= limit)
+    {
+        return Err(too_big);
+    }
+    let mut data = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut data)
+        .map_err(|_| "No se pudo leer el archivo.".to_string())?;
+    if data.len() as u64 > limit {
+        return Err(too_big);
+    }
+    Ok(data)
+}
+
+/// Decodes a PNG under the shared design raster limits. Callers read bytes with `read_asset`.
 pub fn decode_png_rgba(bytes: Vec<u8>) -> Result<image::RgbaImage, String> {
+    decode_png_rgba_limited(bytes, MAX_RASTER_SIDE, MAX_RASTER_PIXELS)
+}
+
+pub fn decode_png_rgba_limited(
+    bytes: Vec<u8>,
+    max_side: u32,
+    max_pixels: u64,
+) -> Result<image::RgbaImage, String> {
     let mut reader = image::ImageReader::with_format(Cursor::new(bytes), image::ImageFormat::Png);
     let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_RASTER_SIDE);
-    limits.max_image_height = Some(MAX_RASTER_SIDE);
-    limits.max_alloc = Some(MAX_RASTER_PIXELS * 8);
+    limits.max_image_width = Some(max_side);
+    limits.max_image_height = Some(max_side);
+    limits.max_alloc = Some(max_pixels * 8);
     reader.limits(limits);
     let decoder = reader
         .into_decoder()
         .map_err(|_| "El PNG está dañado o es demasiado grande.".to_string())?;
     use image::ImageDecoder;
     let (width, height) = decoder.dimensions();
-    check_raster_size(width, height)?;
+    if width == 0
+        || height == 0
+        || width > max_side
+        || height > max_side
+        || u64::from(width) * u64::from(height) > max_pixels
+    {
+        return Err(format!(
+            "La imagen supera las dimensiones permitidas ({max_side} px por lado y {max_pixels} píxeles)."
+        ));
+    }
     Ok(image::DynamicImage::from_decoder(decoder)
         .map_err(|_| "No se pudo decodificar el PNG.".to_string())?
         .into_rgba8())

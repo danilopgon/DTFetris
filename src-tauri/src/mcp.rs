@@ -7,7 +7,7 @@ use crate::commands::{
     persistence::{self, Job},
 };
 use crate::domain::{
-    assets::{decode_png_rgba, inspect_asset, read_asset},
+    assets::inspect_asset,
     design::{fitted_visible_size_cm, parse_color_override, DesignInput, ImageFormat},
     packing::{pack, validate_gap_cm, PackingRequest, PackingResult, SheetConfig},
     regions::{self, Rect, DEFAULT_MERGE_PX},
@@ -174,8 +174,8 @@ struct RectArgs {
 struct RegionImportArgs {
     path: String,
     regions: Option<Vec<usize>>,
+    detection_id: Option<String>,
     rect_px: Option<RectArgs>,
-    merge_px: Option<u32>,
     width_cm: f64,
     height_cm: f64,
     name: Option<String>,
@@ -363,7 +363,7 @@ impl Server {
     }
 
     /// Reads a PNG from the ingest root without modifying it.
-    fn ingest_png(&self, path: &str) -> Result<(image::RgbaImage, PathBuf), String> {
+    fn ingest_png(&self, path: &str) -> Result<(image::RgbaImage, u64, PathBuf), String> {
         let source = relative_source(&self.config.ingest_dir, path)?;
         if !source
             .extension()
@@ -372,7 +372,8 @@ impl Server {
         {
             return Err(invalid("Solo se pueden separar regiones de un PNG."));
         }
-        Ok((decode_png_rgba(read_asset(&source)?)?, source))
+        let (image, fingerprint) = regions::load_source(&source)?;
+        Ok((image, fingerprint, source))
     }
 
     /// Applies optional fields and commits; the new asset copy is removed if commit fails.
@@ -454,7 +455,7 @@ impl Server {
             "detect_regions" => {
                 let a: DetectArgs = parse(args)?;
                 let merge_px = a.merge_px.unwrap_or(DEFAULT_MERGE_PX);
-                let (image, _) = self.ingest_png(&a.path)?;
+                let (image, fingerprint, _) = self.ingest_png(&a.path)?;
                 let found = regions::detect(&image, merge_px)?;
                 let previews = canonical_dir(&self.config.workspace.join("previews"), true)?;
                 if !previews.starts_with(&self.config.workspace) {
@@ -486,8 +487,9 @@ impl Server {
                     .collect();
                 Ok(
                     json!({"path":a.path,"widthPx":found.width,"heightPx":found.height,
-                    "mergePx":merge_px,"regions":list,"previewPath":preview_path,
-                    "notice":"Vista previa NO imprimible con regiones numeradas. Los cm a 300 DPI son solo orientativos: pide al usuario las medidas máximas en cm. Usa el mismo mergePx al importar."}),
+                    "mergePx":merge_px,"detectionId":regions::detection_id(fingerprint, merge_px),
+                    "regions":list,"previewPath":preview_path,
+                    "notice":"Vista previa NO imprimible con regiones numeradas. Los cm a 300 DPI son solo orientativos: pide al usuario las medidas máximas en cm. Para importar regiones pasa este detectionId."}),
                 )
             }
             "import_design_region" => {
@@ -499,35 +501,56 @@ impl Server {
                     a.quantity,
                     a.color_override.as_deref(),
                 )?;
-                let (image, source) = self.ingest_png(&a.path)?;
-                let (crop, label) = match (&a.regions, &a.rect_px) {
+                let (image, fingerprint, source) = self.ingest_png(&a.path)?;
+                let (crop, label, boxes) = match (&a.regions, &a.rect_px) {
                     (Some(selected), None) => {
-                        let found =
-                            regions::detect(&image, a.merge_px.unwrap_or(DEFAULT_MERGE_PX))?;
+                        // Region numbers depend on the file and mergePx: refuse a mismatch
+                        // instead of silently importing another logo.
+                        let id = a.detection_id.as_deref().ok_or(
+                            "Importar regiones requiere el detectionId devuelto por detect_regions.",
+                        )?;
+                        let merge_px = id
+                            .rsplit_once('-')
+                            .and_then(|(_, m)| m.parse::<u32>().ok())
+                            .filter(|m| regions::detection_id(fingerprint, *m) == id)
+                            .ok_or(
+                                "El PNG cambió desde detect_regions o el detectionId no corresponde; vuelve a detectar las regiones.",
+                            )?;
+                        let found = regions::detect(&image, merge_px)?;
                         let label = selected
                             .iter()
                             .map(usize::to_string)
                             .collect::<Vec<_>>()
                             .join("+");
-                        (found.crop(&image, selected)?, format!("región {label}"))
+                        let boxes: Vec<Value> = selected
+                            .iter()
+                            .filter_map(|i| found.regions.get(i.wrapping_sub(1)))
+                            .map(|r| json!({"xPx":r.x,"yPx":r.y,"widthPx":r.width,"heightPx":r.height}))
+                            .collect();
+                        (
+                            found.crop(&image, selected)?,
+                            format!("región {label}"),
+                            boxes,
+                        )
                     }
-                    (None, Some(r)) if a.merge_px.is_none() => (
-                        regions::crop_rect(
-                            &image,
-                            Rect {
-                                x: r.x,
-                                y: r.y,
-                                width: r.width,
-                                height: r.height,
-                            },
-                        )?,
-                        "recorte".to_owned(),
-                    ),
-                    _ => {
-                        return Err(invalid(
-                            "Indica regions (índices de detect_regions, con su mergePx) o rectPx, no ambos.",
-                        ))
+                    (None, Some(r)) if a.detection_id.is_none() => {
+                        let rect = Rect {
+                            x: r.x,
+                            y: r.y,
+                            width: r.width,
+                            height: r.height,
+                        };
+                        (
+                            regions::crop_rect(&image, rect)?,
+                            "recorte".to_owned(),
+                            vec![
+                                json!({"xPx":r.x,"yPx":r.y,"widthPx":r.width,"heightPx":r.height}),
+                            ],
+                        )
                     }
+                    _ => return Err(invalid(
+                        "Indica regions (con el detectionId de detect_regions) o rectPx, no ambos.",
+                    )),
                 };
                 let stem: String = source
                     .file_stem()
@@ -545,7 +568,10 @@ impl Server {
                     a.height_cm,
                 )
                 .map_err(error_text)?;
-                self.add_design(d, a.name, a.quantity, a.can_rotate, a.color_override)
+                let mut out =
+                    self.add_design(d, a.name, a.quantity, a.can_rotate, a.color_override)?;
+                out["sourceBoxesPx"] = json!(boxes);
+                Ok(out)
             }
             "update_design" => {
                 let set_color = args.get("colorOverride").is_some();
@@ -923,7 +949,7 @@ fn tools() -> Vec<Value> {
     }
     add("import_design", "Copia PNG/SVG relativo a ingestión. Exige medidas físicas explícitas; jamás inferirlas del archivo. Invalida layout.", json!({"path":{"type":"string","minLength":1},"widthCm":cm,"heightCm":cm,"name":name,"quantity":quantity,"canRotate":{"type":"boolean"},"colorOverride":color}), json!(["path","widthCm","heightCm"]), false, false);
     add("detect_regions", "Detecta logos separados por transparencia en un PNG de ingestión, agrupando partes a menos de mergePx (por defecto 24 px, unos 2 mm a 300 DPI). Devuelve regiones numeradas y escribe en workspace/previews una vista NO imprimible con las cajas. No modifica el original.", json!({"path":{"type":"string","minLength":1},"mergePx":{"type":"integer","minimum":0,"maximum":1000}}), json!(["path"]), false, false);
-    add("import_design_region", "Recorta del PNG de ingestión las regiones indicadas (índices de detect_regions con el mismo mergePx) o un rectángulo rectPx, y lo importa como copia privada nueva. Exige medidas máximas explícitas en cm; jamás inferirlas de píxeles. El original no se modifica. Invalida layout.", json!({"path":{"type":"string","minLength":1},"regions":{"type":"array","items":{"type":"integer","minimum":1},"minItems":1,"maxItems":4096},"rectPx":{"type":"object","properties":{"x":{"type":"integer","minimum":0},"y":{"type":"integer","minimum":0},"width":{"type":"integer","minimum":1},"height":{"type":"integer","minimum":1}},"required":["x","y","width","height"],"additionalProperties":false},"mergePx":{"type":"integer","minimum":0,"maximum":1000},"widthCm":cm,"heightCm":cm,"name":name,"quantity":quantity,"canRotate":{"type":"boolean"},"colorOverride":color}), json!(["path","widthCm","heightCm"]), false, false);
+    add("import_design_region", "Recorta del PNG de ingestión las regiones indicadas (índices y detectionId de detect_regions) o un rectángulo rectPx, y lo importa como copia privada nueva. Exige medidas máximas explícitas en cm; jamás inferirlas de píxeles. El original no se modifica. Invalida layout.", json!({"path":{"type":"string","minLength":1},"regions":{"type":"array","items":{"type":"integer","minimum":1},"minItems":1,"maxItems":4096},"rectPx":{"type":"object","properties":{"x":{"type":"integer","minimum":0},"y":{"type":"integer","minimum":0},"width":{"type":"integer","minimum":1},"height":{"type":"integer","minimum":1}},"required":["x","y","width","height"],"additionalProperties":false},"detectionId":{"type":"string","minLength":1,"maxLength":64},"widthCm":cm,"heightCm":cm,"name":name,"quantity":quantity,"canRotate":{"type":"boolean"},"colorOverride":color}), json!(["path","widthCm","heightCm"]), false, false);
     add(
         "update_design",
         "Edita un diseño por ID atómicamente e invalida layout. Medidas explícitas en cm.",

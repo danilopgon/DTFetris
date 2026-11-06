@@ -1,7 +1,8 @@
 //! Separates the logos of a transparent PNG into regions so one can be imported on its
 //! own. Works in source pixels: physical size is still requested in cm at import.
-use super::assets::VISIBLE_ALPHA;
+use super::assets::{decode_png_rgba_limited, read_bounded, VISIBLE_ALPHA};
 use image::{Rgba, RgbaImage};
+use std::path::Path;
 
 /// Default merge distance: about 2 mm at 300 DPI, so text under an icon stays together.
 pub const DEFAULT_MERGE_PX: u32 = 24;
@@ -9,6 +10,27 @@ pub const MAX_MERGE_PX: u32 = 1000;
 /// Above this many raw islands the PNG is noise or a photo, not separable logos.
 const MAX_COMPONENTS: usize = 4096;
 const PREVIEW_MAX_SIDE: u32 = 1600;
+// Sources may be whole exported sheets (60 × 100 cm ≈ 84 M px), so they use the export
+// destination limits instead of the design ones. The crop is rescanned as a design.
+const MAX_SOURCE_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_SOURCE_SIDE: u32 = 32_768;
+const MAX_SOURCE_PIXELS: u64 = 100_000_000;
+
+/// Reads a PNG that regions will be cut from, with a fingerprint of its bytes so region
+/// numbers can be tied to one exact file. Peak memory near the cap is about 1 GB.
+pub fn load_source(path: &Path) -> Result<(RgbaImage, u64), String> {
+    let bytes = read_bounded(path, MAX_SOURCE_BYTES)?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hash::hash(&bytes, &mut hasher);
+    let fingerprint = std::hash::Hasher::finish(&hasher);
+    let image = decode_png_rgba_limited(bytes, MAX_SOURCE_SIDE, MAX_SOURCE_PIXELS)?;
+    Ok((image, fingerprint))
+}
+
+/// Identifies one detection: same file bytes and same merge distance give the same numbers.
+pub fn detection_id(fingerprint: u64, merge_px: u32) -> String {
+    format!("{fingerprint:016x}-{merge_px}")
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
@@ -50,7 +72,7 @@ pub struct Regions {
     pub height: u32,
     pub regions: Vec<Rect>,
     /// Island label per pixel (0 = not visible) and the region of each island.
-    labels: Vec<u32>,
+    labels: Vec<u16>,
     island_region: Vec<usize>,
 }
 
@@ -62,21 +84,19 @@ pub fn detect(image: &RgbaImage, merge_px: u32) -> Result<Regions, String> {
     }
     let (width, height) = image.dimensions();
     let visible = |x: u32, y: u32| image.get_pixel(x, y)[3] >= VISIBLE_ALPHA;
-    let corners = [
-        (0, 0),
-        (width - 1, 0),
-        (0, height - 1),
-        (width - 1, height - 1),
-    ];
-    if corners.iter().all(|&(x, y)| visible(x, y)) {
+    // Packed sheets have no outer margin, so art may touch edges and corners; only a
+    // fully visible border means an opaque background.
+    let border_visible = (0..width).all(|x| visible(x, 0) && visible(x, height - 1))
+        && (0..height).all(|y| visible(0, y) && visible(width - 1, y));
+    if border_visible {
         return Err(
             "El PNG no tiene fondo transparente; solo se pueden separar logos sobre transparencia."
                 .into(),
         );
     }
-    let mut labels = vec![0u32; (width * height) as usize];
+    let mut labels = vec![0u16; (width as usize) * (height as usize)];
     let mut islands: Vec<Rect> = vec![];
-    let mut stack = vec![];
+    let mut stack: Vec<u32> = vec![];
     for start in 0..labels.len() {
         let (sx, sy) = (start as u32 % width, start as u32 / width);
         if labels[start] != 0 || !visible(sx, sy) {
@@ -87,11 +107,12 @@ pub fn detect(image: &RgbaImage, merge_px: u32) -> Result<Regions, String> {
                 "El PNG tiene más de {MAX_COMPONENTS} islas visibles; no parece un conjunto de logos separables."
             ));
         }
-        let label = islands.len() as u32 + 1;
+        let label = islands.len() as u16 + 1;
         let (mut x0, mut y0, mut x1, mut y1) = (sx, sy, sx, sy);
         labels[start] = label;
-        stack.push((sx, sy));
-        while let Some((x, y)) = stack.pop() {
+        stack.push(start as u32);
+        while let Some(index) = stack.pop() {
+            let (x, y) = (index % width, index / width);
             (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
             for (dx, dy) in [
                 (-1i64, -1i64),
@@ -111,7 +132,7 @@ pub fn detect(image: &RgbaImage, merge_px: u32) -> Result<Regions, String> {
                 let n = (ny * width + nx) as usize;
                 if labels[n] == 0 && visible(nx, ny) {
                     labels[n] = label;
-                    stack.push((nx, ny));
+                    stack.push(n as u32);
                 }
             }
         }

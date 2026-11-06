@@ -106,8 +106,9 @@ Decidido con el usuario el 2026-11-06. Sustituye la regla anterior de que separa
 Evidencia:
 
 - `domain::regions` (detección, agrupación, recorte, vista numerada con dígitos de mapa de bits, sin dependencias nuevas), `import_rgba_into` y herramientas MCP `detect_regions`/`import_design_region`. Validación de medidas y alta de diseños compartidas con `import_design`; umbral de visibilidad compartido (`VISIBLE_ALPHA`) y decodificación PNG con los mismos límites (`decode_png_rgba`).
-- `cargo test`: **106 tests** (11 nuevos: 7 de regiones, 1 de importación en memoria, 3 de MCP). `cargo fmt` aplicado; clippy sin avisos nuevos salvo uno de estilo por indexado intencionado.
-- `npm run build:mcp` y `npm run test:mcp`: stdio real con **14 herramientas**.
+- `cargo test`: **107 tests** (12 nuevos: 7 de regiones, 1 de importación en memoria, 4 de MCP, entre ellos una plancha real de 60 × 100 cm exportada y separada de nuevo). `cargo fmt` aplicado; clippy sin avisos nuevos salvo uno de estilo por indexado intencionado.
+- Correcciones tras revisión: las fuentes de regiones usan los límites de exportación (antes una plancha completa se rechazaba) y el fondo opaco se detecta con el borde completo (antes bastaban las esquinas). Además, `detectionId` impide importar otro logo si cambian el archivo o `mergePx`.
+- EXE de la app y servidor MCP recompilados desde este código. `npm run test:native` en verde (separación 9,991 mm), y `npm run test:mcp` con stdio real y **14 herramientas**.
 - Pendiente: probarlo con el encargo real de este fin de semana. No se ha usado aún con un PNG de cliente ni desde el cliente MCP habitual.
 
 Prioridad inmediata: que el usuario compare y apruebe o corrija el encargo de 10 mm antes de darlo por bueno.

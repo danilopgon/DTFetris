@@ -749,11 +749,17 @@ fn import_design_region_crops_a_private_copy_with_explicit_physical_size() {
     let f = Fixture::new();
     let original = logo_sheet(&f);
     let mut s = f.server();
-    s.call(
-        "import_design_region",
-        json!({"path":"sheet.png","regions":[2],"widthCm":6,"heightCm":6,"quantity":3,"colorOverride":"#c0c0c0"}),
-    )
-    .unwrap();
+    let id = detection(&mut s, "sheet.png", None);
+    let out = s
+        .call(
+            "import_design_region",
+            json!({"path":"sheet.png","regions":[2],"detectionId":id,"widthCm":6,"heightCm":6,"quantity":3,"colorOverride":"#c0c0c0"}),
+        )
+        .unwrap();
+    assert_eq!(
+        out["sourceBoxesPx"],
+        json!([{"xPx":200,"yPx":20,"widthPx":60,"heightPx":30}])
+    );
     let d = s.job.designs.last().unwrap().clone();
     assert_eq!(d.name, "sheet (región 2)");
     assert_eq!((d.width_cm, d.height_cm, d.quantity), (6.0, 6.0, 3));
@@ -768,7 +774,7 @@ fn import_design_region_crops_a_private_copy_with_explicit_physical_size() {
     // Merged regions keep the caption's own alpha; rectangles copy pixels as they are.
     s.call(
         "import_design_region",
-        json!({"path":"sheet.png","regions":[1],"widthCm":4,"heightCm":3,"name":"Icono con texto"}),
+        json!({"path":"sheet.png","regions":[1],"detectionId":id,"widthCm":4,"heightCm":3,"name":"Icono con texto"}),
     )
     .unwrap();
     let icon = image::open(&s.job.designs.last().unwrap().image_path)
@@ -801,23 +807,29 @@ fn import_design_region_rejects_invalid_requests_without_copies() {
         .save(f.0.join("ingest/opaque.png"))
         .unwrap();
     let mut s = f.server();
+    let id = detection(&mut s, "sheet.png", None);
+    let split = detection(&mut s, "sheet.png", Some(0));
     let before = s.snapshot();
     let ok = json!({"x":0,"y":0,"width":10,"height":10});
     for args in [
         json!({"path":"sheet.png","widthCm":1,"heightCm":1}),
-        json!({"path":"sheet.png","regions":[1],"rectPx":ok,"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"detectionId":id,"rectPx":ok,"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","rectPx":ok,"detectionId":id,"widthCm":1,"heightCm":1}),
         json!({"path":"sheet.png","rectPx":ok,"mergePx":3,"widthCm":1,"heightCm":1}),
-        json!({"path":"sheet.png","regions":[3],"widthCm":1,"heightCm":1}),
-        json!({"path":"sheet.png","regions":[0],"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[3],"detectionId":id,"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[0],"detectionId":id,"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"detectionId":"0000000000000000-24","widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"detectionId":"garbage","widthCm":1,"heightCm":1}),
         json!({"path":"sheet.png","rectPx":{"x":290,"y":0,"width":20,"height":5},"widthCm":1,"heightCm":1}),
         json!({"path":"sheet.png","rectPx":{"x":120,"y":80,"width":20,"height":20},"widthCm":1,"heightCm":1}),
-        json!({"path":"sheet.png","regions":[1],"widthCm":1.5,"heightCm":1}),
-        json!({"path":"sheet.png","regions":[1],"widthCm":1,"heightCm":1,"quantity":1001}),
-        json!({"path":"sheet.png","regions":[1],"widthCm":1,"heightCm":1,"colorOverride":"rojo"}),
-        json!({"path":"nested/art.svg","regions":[1],"widthCm":1,"heightCm":1}),
-        json!({"path":"opaque.png","regions":[1],"widthCm":1,"heightCm":1}),
-        json!({"path":"../sheet.png","regions":[1],"widthCm":1,"heightCm":1}),
-        json!({"path":"sheet.png","regions":[1],"widthCm":1,"heightCm":1,"extra":true}),
+        json!({"path":"sheet.png","regions":[1],"detectionId":id,"widthCm":1.5,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"detectionId":id,"widthCm":1,"heightCm":1,"quantity":1001}),
+        json!({"path":"sheet.png","regions":[1],"detectionId":id,"widthCm":1,"heightCm":1,"colorOverride":"rojo"}),
+        json!({"path":"nested/art.svg","regions":[1],"detectionId":id,"widthCm":1,"heightCm":1}),
+        json!({"path":"opaque.png","regions":[1],"detectionId":id,"widthCm":1,"heightCm":1}),
+        json!({"path":"../sheet.png","regions":[1],"detectionId":id,"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"detectionId":id,"widthCm":1,"heightCm":1,"extra":true}),
     ] {
         assert!(
             s.call("import_design_region", args.clone()).is_err(),
@@ -833,5 +845,97 @@ fn import_design_region_rejects_invalid_requests_without_copies() {
         .is_err());
     assert_eq!(s.snapshot(), before);
     let assets = s.config.asset_root.join("design-assets");
-    assert!(!assets.exists() || fs::read_dir(assets).unwrap().count() == 0);
+    assert!(!assets.exists() || fs::read_dir(&assets).unwrap().count() == 0);
+
+    // Each detection keeps its own numbering: index 3 exists only without merging.
+    s.call(
+        "import_design_region",
+        json!({"path":"sheet.png","regions":[3],"detectionId":split,"widthCm":1,"heightCm":1}),
+    )
+    .unwrap();
+    assert_eq!(s.job.designs.last().unwrap().name, "sheet (región 3)");
+    // A file replaced after detection invalidates its numbers instead of cutting another logo.
+    image::RgbaImage::from_pixel(300, 120, image::Rgba([0, 0, 0, 0]))
+        .save(f.0.join("ingest/sheet.png"))
+        .unwrap();
+    assert!(s
+        .call(
+            "import_design_region",
+            json!({"path":"sheet.png","regions":[1],"detectionId":id,"widthCm":1,"heightCm":1}),
+        )
+        .unwrap_err()
+        .contains("cambió"));
+    assert_eq!(fs::read_dir(&assets).unwrap().count(), 1);
+}
+
+fn detection(s: &mut Server, path: &str, merge_px: Option<u32>) -> String {
+    let mut args = json!({ "path": path });
+    if let Some(m) = merge_px {
+        args["mergePx"] = json!(m);
+    }
+    s.call("detect_regions", args).unwrap()["detectionId"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+#[test]
+fn a_full_exported_sheet_with_edge_pieces_can_be_split_again() {
+    // Regression: a 60 × 100 cm sheet (≈ 84 M px) exceeds the design import limits, and
+    // packed pieces touch the corners without an outer margin.
+    let f = Fixture::new();
+    let mut ring = image::RgbaImage::new(200, 100);
+    for (x, y, p) in ring.enumerate_pixels_mut() {
+        let hole = (80..120).contains(&x) && (30..70).contains(&y);
+        if !hole {
+            *p = image::Rgba([10, 120, 40, 255]);
+        }
+    }
+    ring.save(f.0.join("ingest/ring.png")).unwrap();
+    let mut s = f.server();
+    s.call(
+        "import_design",
+        json!({"path":"ring.png","widthCm":30,"heightCm":30,"quantity":4}),
+    )
+    .unwrap();
+    s.call(
+        "configure_sheet",
+        json!({"widthCm":60,"heightCm":100,"gapCm":1}),
+    )
+    .unwrap();
+    s.call("run_packing", json!({})).unwrap();
+    s.call("export_png", json!({"name":"plancha.png","confirm":true}))
+        .unwrap();
+    fs::rename(
+        s.config.workspace.join("exports/plancha.png"),
+        f.0.join("ingest/plancha.png"),
+    )
+    .unwrap();
+    let out = s
+        .call("detect_regions", json!({"path":"plancha.png"}))
+        .unwrap();
+    assert_eq!(out["widthPx"], 7087);
+    assert_eq!(out["heightPx"], 11811);
+    let regions = out["regions"].as_array().unwrap();
+    assert_eq!(regions.len(), 4, "{regions:?}");
+    assert_eq!(
+        (regions[0]["xPx"].clone(), regions[0]["yPx"].clone()),
+        (json!(0), json!(0))
+    );
+    for r in regions {
+        // 30 × 15 cm at 300 DPI, allowing for resampling at the edges.
+        let w = r["widthPx"]
+            .as_u64()
+            .unwrap()
+            .max(r["heightPx"].as_u64().unwrap());
+        assert!((3540..=3546).contains(&w), "{r}");
+    }
+    let id = out["detectionId"].as_str().unwrap().to_owned();
+    s.call(
+        "import_design_region",
+        json!({"path":"plancha.png","regions":[1],"detectionId":id,"widthCm":30,"heightCm":30}),
+    )
+    .unwrap();
+    let d = s.job.designs.last().unwrap();
+    assert!((d.original_aspect_ratio - 2.0).abs() < 0.01);
 }

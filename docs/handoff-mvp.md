@@ -57,7 +57,7 @@ El usuario pidió automatizar la prueba de la aplicación nativa y autorizó hac
 6. **El usuario corrigió el encargo a 10 mm para cortar a tijera.** Se regeneró con `gapCm: 1`. Esto fue una configuración del pedido: **no se cambió el default global de 3 mm**. No asumir que ha solicitado cambiarlo para todos los trabajos.
 7. Separación entre bboxes, sin imponer margen exterior. No hay espejo automático, base blanca, ICC ni tinta metálica. El plata solicitado es un color RGB.
 8. No deformar automáticamente. No persistir trabajos en `localStorage`/IndexedDB ni guardar objetos `File`.
-9. Separar un SVG compuesto fue preparación externa vectorial del agente; no se añadió ni se pide un editor/separador dentro de DTFetris.
+9. Separar un SVG compuesto fue preparación externa vectorial del agente; no hay separador de SVG en DTFetris. **Desde el 2026-11-06 sí hay separación de logos en PNG transparentes, solo por MCP** (incremento I del roadmap: `detect_regions` + `import_design_region`).
 
 ## 5. Evidencia técnica disponible
 
