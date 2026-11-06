@@ -105,6 +105,55 @@ function decodePng(source) {
   return { width, height, phys, px: rgba }
 }
 
+/** Bounding boxes of 8-connected non-transparent components (alpha > 0). */
+function components({ width, height, px }) {
+  const label = new Int32Array(width * height)
+  const boxes = []
+  const stack = []
+  for (let start = 0; start < width * height; start++) {
+    if (label[start] || px[start * 4 + 3] === 0) continue
+    const box = { x0: width, y0: height, x1: -1, y1: -1 }
+    label[start] = boxes.length + 1
+    stack.push(start)
+    while (stack.length) {
+      const i = stack.pop()
+      const x = i % width
+      const y = (i - x) / width
+      if (x < box.x0) box.x0 = x
+      if (x > box.x1) box.x1 = x
+      if (y < box.y0) box.y0 = y
+      if (y > box.y1) box.y1 = y
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+          const n = ny * width + nx
+          if (!label[n] && px[n * 4 + 3] !== 0) {
+            label[n] = boxes.length + 1
+            stack.push(n)
+          }
+        }
+    }
+    boxes.push({ ...box, w: box.x1 - box.x0 + 1, h: box.y1 - box.y0 + 1, id: boxes.length + 1 })
+  }
+  // Resampling ripples inside a design's own bbox (e.g. a faint halo in a hole) belong to it.
+  const inside = (a, b) => a !== b && a.x0 >= b.x0 && a.x1 <= b.x1 && a.y0 >= b.y0 && a.y1 <= b.y1
+  const nested = boxes.filter((a) => boxes.some((b) => inside(a, b)))
+  let nestedMaxAlpha = 0
+  const ids = new Set(nested.map((n) => n.id))
+  for (let i = 0; i < label.length; i++)
+    if (ids.has(label[i])) nestedMaxAlpha = Math.max(nestedMaxAlpha, px[i * 4 + 3])
+  return { boxes: boxes.filter((a) => !nested.includes(a)), nested: nested.length, nestedMaxAlpha }
+}
+
+/** Smallest empty band between two boxes; boxes overlapping on one axis use the other one. */
+function separationPx(a, b) {
+  const dx = Math.max(b.x0 - a.x1 - 1, a.x0 - b.x1 - 1)
+  const dy = Math.max(b.y0 - a.y1 - 1, a.y0 - b.y1 - 1)
+  return Math.max(dx, dy)
+}
+
 // ─── Process, CDP and dialog helpers ────────────────────────────────────────
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -397,8 +446,19 @@ async function main() {
           opaqueTotal++
         } else partial++
       }
+      const { boxes, nested, nestedMaxAlpha } = components(a)
+      let minGap = Infinity
+      for (let m = 0; m < boxes.length; m++)
+        for (let n = m + 1; n < boxes.length; n++)
+          minGap = Math.min(minGap, separationPx(boxes[m], boxes[n]))
       pngReport.push({
         file: pngsA[i],
+        components: boxes.map((c) => `${c.w}x${c.h}@${c.x0},${c.y0}`),
+        nestedFragments: nested,
+        nestedMaxAlpha,
+        minSeparationPx: minGap,
+        minSeparationMm: +((minGap * 25.4) / 300).toFixed(3),
+        originalRed: colors.has('220,30,30'),
         size: `${a.width}x${a.height}`,
         phys: a.phys,
         identicalToB: a.width === b.width && a.height === b.height && a.px.equals(b.px),
@@ -416,6 +476,22 @@ async function main() {
     checks.pngSilverAndBlue =
       pngReport.some((r) => r.opaqueColors.some(([k]) => k === SILVER.join(','))) &&
       pngReport.some((r) => r.opaqueColors.some(([k]) => k === '29,78,216'))
+    // 8 cm at 300 DPI = 945 px; the 2:1 logo is 945x472 (or rotated), the circle 945x945.
+    const near = (v, t) => Math.abs(v - t) <= 2
+    const all = pngReport.flatMap((r) =>
+      r.components.map((c) => c.split('@')[0].split('x').map(Number)),
+    )
+    const logos = all.filter(
+      ([w, h]) => (near(w, 945) && near(h, 472)) || (near(w, 472) && near(h, 945)),
+    )
+    checks.pngComponents =
+      all.length === 5 &&
+      logos.length === 3 &&
+      all.filter(([w, h]) => near(w, 945) && near(h, 945)).length === 2
+    checks.pngRotatedLogos = logos.filter(([w, h]) => h > w).length === 2
+    // 10 mm = 118.1 px; pixel rounding of placements may lose about one pixel.
+    checks.pngSeparation10mm = pngReport.every((r) => r.minSeparationPx >= 117)
+    checks.pngOriginalRedReplaced = pngReport.every((r) => !r.originalRed)
     checks.noRuntimeErrors = problems1.length === 0 && problems2.length === 0
 
     Object.assign(results, { checks, pngReport, figures1, problems1, problems2, opaqueTotal })

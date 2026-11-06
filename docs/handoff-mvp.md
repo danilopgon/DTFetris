@@ -73,6 +73,7 @@ El usuario pidió automatizar la prueba de la aplicación nativa y autorizó hac
 | `git diff --check` | Correcto. |
 | `npm run build` | EXE, MSI y NSIS Windows generados. |
 | `npm run build:mcp` | EXE release del servidor generado. |
+| `npm run test:native` (2026-11-06) | EXE recompilado: selector y diálogos reales, WebView2, cierre/recuperación, PNG idénticos, separación medida 9,991 mm. |
 | `npm run test:mcp` | Proceso stdio real: inicialización, 12 herramientas, estado/listado/ping y cierre por EOF. |
 
 Los tests Rust incluyen archivos reales e IPC Tauri con runtime simulado, recuperación y reexportación. Esto aporta evidencia del backend, **no acredita por sí solo los diálogos y la carga de assets en WebView2 del escritorio**.
@@ -155,7 +156,7 @@ Documentación oficial consultada: <https://v2.tauri.app/develop/tests/webdriver
 - Revisar rutas/backup: el JSON no incorpora assets. No prometer portabilidad, autosave ni detección por hash de cualquier cambio en assets.
 - Al cerrar: actualizar evidencia y PR; no hacer merge automático a `main` sin autorización.
 
-**Criterio propuesto:** MVP funcional aceptable al pasar el recorrido nativo y obtener aprobación visual; validado para taller al superar la prueba física. No ampliar alcance para perseguir optimalidad global, editor SVG, control de impresora o i18n.
+**Criterio propuesto:** MVP funcional aceptable al obtener aprobación visual (el recorrido nativo ya pasó el 2026-11-06); validado para taller al superar la prueba física. No ampliar alcance para perseguir optimalidad global, editor SVG, control de impresora o i18n.
 
 ## 9. Referencias para continuar
 

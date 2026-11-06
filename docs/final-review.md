@@ -33,7 +33,7 @@ El test de impresión escribe una hoja completa de **7087 × 11811 px**, verific
 
 ## Límites de esta validación
 
-- Chromium usa IPC/diálogos simulados: no equivale a prueba integral nativa. EXE lanzado y ventana detectada, pero diálogos y preview WebView2 reales quedan pendientes de comprobación manual fiable.
+- Chromium usa IPC/diálogos simulados. El recorrido nativo se verificó aparte el 2026-11-06 con `npm run test:native`: EXE de producción, WebView2, diálogos reales de Windows, cierre/recuperación y PNG idénticos (ver [roadmap.md](roadmap.md)).
 - Impresión física, RIP, espejo, perfiles de tinta y base blanca no verificados. No hay espejo ni márgenes automáticos.
 - SVG debe ser autocontenido con texto convertido a trazados; imágenes anidadas, scripts, HTML y patrones no admitidos.
 - Máximo 1000 copias/presupuesto de packing, fuente 20 MiB/32 millones de píxeles, destino 100 millones de píxeles/32768 por lado. El tamaño inicial necesita unos 335 MB más buffers temporales.
@@ -70,6 +70,6 @@ Evidencia vigente: **145 tests frontend / 95 Rust / 5 E2E web**, smoke del MCP r
 
 Se generaron un control 60 × 100 y un candidato **60 × 86 cm**, de **7087 × 10157 px a 300 DPI**, preservando tamaños visibles y 3 mm entre bboxes: 14% menos superficie de plancha. El barrido encontró esa menor altura entera para esta heurística, no demuestra optimalidad global. Se verificaron los 44 bboxes impresos, colores/alpha y originales sin cambios; desvío de rasterización de bbox frente al plan inferior a 0.272 mm. Arte, nombres y resultados privados se mantienen fuera del repositorio. La comparación HTML/PNG local está preparada para el usuario.
 
-**No aprobado todavía**: queda la comparación visual del usuario y la validación física/RIP. No se sustituye esa aprobación por los tests técnicos ni se declara verificado un diálogo nativo que no se probó.
+**No aprobado todavía**: queda la comparación visual del usuario y la validación física/RIP. No se sustituye esa aprobación por los tests técnicos.
 
 Se respetaron los máximos físicos del pedido, no las escalas manuales exactas de la referencia. La reducción del 14% compara superficies de hoja; no demuestra una mejora de packing a idénticas escalas frente a Photopea. Entre control y candidato DTFetris sí se mantuvieron idénticos tamaños visibles.

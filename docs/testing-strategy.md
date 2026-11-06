@@ -22,6 +22,7 @@ Escenario: PNG 2:1 con padding/agujero transparentes y SVG sintéticos generados
 - el JSON (hoja, cantidades, color, rotación, assets dentro de `design-assets`);
 - el arte real en la vista previa. Las imágenes del protocolo de assets *taintean* el canvas y `getImageData` falla, así que se analiza una captura CDP del canvas. La app no lee píxeles: colorea con composición del canvas;
 - los PNG con un decodificador propio, independiente del código Rust: 2362 px por lado, `pHYs` de 11811 px/m, transparencia, colores opacos exactos y que las dos exportaciones son idénticas píxel a píxel;
+- la composición física en el PNG: componentes conexos con alpha > 0 (los fragmentos contenidos en la caja de otro, como el halo de remuestreo en un agujero, cuentan como parte de ese diseño), tamaños de bbox visibles de 8 cm = 945 px, número de logos rotados y separación mínima entre cajas ≥ 117 px (10 mm = 118,1 px);
 - ausencia de errores de consola, de página y de red.
 
 `design-assets` no se puede redirigir, porque Tauri lo resuelve con la API del Shell, no con `APPDATA`. La prueba registra SHA-256 de los archivos previos, elimina solo las copias que añadió y falla si alguno preexistente cambia. Capturas, `resultado.json` y `registro.log` quedan en `%TEMP%\dtfetris-native-*`. Abre ventanas y diálogos en el escritorio: no usar el ratón durante la ejecución (≈1 min). No sustituye la aprobación visual ni la prueba física en el RIP.
