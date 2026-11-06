@@ -31,3 +31,6 @@ coverage/
 .DS_Store
 Thumbs.db
 bash.exe.stackdump
+
+# CodeGraph index
+.codegraph/
