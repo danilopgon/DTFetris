@@ -18,6 +18,7 @@ Esta carpeta reemplaza el BRS monolítico por documentos enfocados. Úsala como 
 | Preparar, exportar y comprobar un trabajo real | [manual-dtf-check.md](./manual-dtf-check.md) |
 | Decisión MaxRects y límites operativos | [packing-decision.md](./packing-decision.md) |
 | Evidencia de entrega, decisiones y límites verificados | [final-review.md](./final-review.md) |
+| Continuar el MVP: relevo, pedido de 10 mm y prueba nativa pendiente | [handoff-mvp.md](./handoff-mvp.md) |
 | Preparar trabajos con un agente MCP y carpeta de ingesta | [agent-integration.md](./agent-integration.md) |
 
 ## Estado del producto
