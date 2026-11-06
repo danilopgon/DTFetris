@@ -109,7 +109,13 @@ Evidencia:
 - `cargo test`: **107 tests** (12 nuevos: 7 de regiones, 1 de importación en memoria, 4 de MCP, entre ellos una plancha real de 60 × 100 cm exportada y separada de nuevo). `cargo fmt` aplicado; clippy sin avisos nuevos salvo uno de estilo por indexado intencionado.
 - Correcciones tras revisión: las fuentes de regiones usan los límites de exportación (antes una plancha completa se rechazaba) y el fondo opaco se detecta con el borde completo (antes bastaban las esquinas). Además, `detectionId` impide importar otro logo si cambian el archivo o `mergePx`.
 - EXE de la app y servidor MCP recompilados desde este código. `npm run test:native` en verde (separación 9,991 mm), y `npm run test:mcp` con stdio real y **14 herramientas**.
-- Pendiente: probarlo con el encargo real de este fin de semana. No se ha usado aún con un PNG de cliente ni desde el cliente MCP habitual.
+- **Uso real validado (2026-11-06):** encargo de 4 diseños y 53 copias recortados de 3 planchas archivadas (55 × 100 cm, 300 DPI, ≈ 77 M px; detección en unos segundos) y de un SVG anterior. Plancha completa de 60 × 100 cm con la separación subida al máximo que cabe en una hoja (25 mm). Verificación independiente con el layout: 0 píxeles visibles fuera de las piezas, separación medida de 24,9 mm, tamaños con −0,6 %, +0,2 % y +1,7 % frente a lo impreso antes (la última se debe a los cm enteros). El usuario lo validó. Datos y artwork privados fuera del repositorio.
+- Hallazgos del uso real (posibles mejoras, no bloquean):
+  - con letras muy espaciadas hay que subir `mergePx` (60);
+  - si los huecos internos de un logo superan la distancia al logo vecino, la agrupación por distancia no puede separarlos y hay que usar `rectPx` tras revisar un zoom;
+  - los logos con contornos que se tocan forman una sola región gigante;
+  - en la vista NO-IMPRIMIR los números tapan las regiones pequeñas.
+- El flujo de encargo (interpretar pedido, recortar, tamaños con desviación, plancha completa, margen máximo, verificación y archivo) quedó como skill de usuario fuera del repo, con rutas privadas. El servidor está registrado en Claude Code con ingesta en el archivo de planchas del taller.
 
 Prioridad inmediata: que el usuario compare y apruebe o corrija el encargo de 10 mm antes de darlo por bueno.
 
