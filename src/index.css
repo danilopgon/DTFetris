@@ -1,3 +1,21 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .action-primary {
+    @apply rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .action-secondary {
+    @apply rounded border border-gray-500 px-3 py-2 text-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .number-input {
+    @apply mt-1 block w-32 rounded border border-gray-600 bg-gray-800 px-2 py-2 text-sm;
+  }
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 3px;
+}

@@ -1,7 +1,18 @@
 import { open } from '@tauri-apps/plugin-dialog'
 import { useState } from 'react'
 import { useAppStore } from '../../store/useAppStore'
-import type { DesignInput, DesignUpdatePatch, DomainValidationError, ImportDesignErrorCode } from '../../types/domain'
+import type {
+  DesignInput,
+  DesignUpdatePatch,
+  DomainValidationError,
+  ImportDesignErrorCode,
+} from '../../types/domain'
+import {
+  getFittedVisibleSizeCm,
+  isPositiveIntegerCm,
+  isValidColorOverride,
+  validateEditableDesignInput,
+} from '../../types/domain'
 import { mapImportErrorToMessage } from '../../utils/importErrors'
 
 type EditForm = {
@@ -10,6 +21,7 @@ type EditForm = {
   heightCm: string
   quantity: string
   canRotate: boolean
+  colorOverride: string
 }
 
 export default function DesignList() {
@@ -21,6 +33,7 @@ export default function DesignList() {
   const removeDesign = useAppStore((state) => state.removeDesign)
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([])
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [widthCm, setWidthCm] = useState<string>('')
   const [heightCm, setHeightCm] = useState<string>('')
@@ -31,25 +44,27 @@ export default function DesignList() {
   const [editError, setEditError] = useState<string | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const parsedWidth = parseFloat(widthCm)
-  const parsedHeight = parseFloat(heightCm)
-  const isValid =
-    Number.isInteger(parsedWidth) &&
-    parsedWidth > 0 &&
-    Number.isInteger(parsedHeight) &&
-    parsedHeight > 0
+  const parsedWidth = Number(widthCm)
+  const parsedHeight = Number(heightCm)
+  const isValid = isPositiveIntegerCm(parsedWidth) && isPositiveIntegerCm(parsedHeight)
   const canImport = !!selectedPath && isValid && !isImporting
 
   async function handleSelectFile() {
     setErrorMessage(null)
     try {
       const path = await open({
-        multiple: false,
+        multiple: true,
         filters: [{ name: 'Imágenes PNG y SVG', extensions: ['png', 'svg'] }],
       })
-      if (path && !Array.isArray(path)) {
-        setSelectedPath(path)
-        setSelectedName(path.split(/[/\\]/).pop() ?? path)
+      if (path && (!Array.isArray(path) || path.length > 0)) {
+        const paths = Array.isArray(path) ? path : [path]
+        setSelectedPaths(paths)
+        setSelectedPath(paths[0])
+        setSelectedName(
+          paths.length === 1
+            ? (paths[0].split(/[/\\]/).pop() ?? paths[0])
+            : `${paths.length} archivos seleccionados`,
+        )
       }
     } catch {
       setErrorMessage('No se pudo abrir el selector de archivos.')
@@ -61,12 +76,31 @@ export default function DesignList() {
     setErrorMessage(null)
     setIsImporting(true)
     try {
-      await importDesign({
-        sourcePath: selectedPath,
-        widthCm: parsedWidth,
-        heightCm: parsedHeight,
-      })
+      // Process sequentially: bounded memory and successful imports survive a later error.
+      const paths = selectedPaths.length ? selectedPaths : [selectedPath]
+      const failed: string[] = []
+      const failures: string[] = []
+      for (const sourcePath of paths) {
+        try {
+          await importDesign({ sourcePath, widthCm: parsedWidth, heightCm: parsedHeight })
+        } catch (err) {
+          failed.push(sourcePath)
+          failures.push(mapImportErrorToMessage(String(err)))
+        }
+      }
+      if (failed.length) {
+        setSelectedPaths(failed)
+        setSelectedPath(failed[0])
+        setSelectedName(
+          failed.length === 1
+            ? (failed[0].split(/[/\\]/).pop() ?? failed[0])
+            : `${failed.length} archivos pendientes`,
+        )
+        setErrorMessage([...new Set(failures)].join(' '))
+        return
+      }
       setSelectedPath(null)
+      setSelectedPaths([])
       setSelectedName(null)
       setWidthCm('')
       setHeightCm('')
@@ -86,6 +120,7 @@ export default function DesignList() {
       heightCm: String(design.heightCm),
       quantity: String(design.quantity),
       canRotate: design.canRotate,
+      colorOverride: design.colorOverride ?? '',
     })
     setEditError(null)
   }
@@ -102,6 +137,8 @@ export default function DesignList() {
 
   function saveEdit(id: string) {
     if (!editForm) return
+    const design = designs.find((d) => d.id === id)
+    if (!design) return
 
     const patch: DesignUpdatePatch = {
       name: editForm.name.trim(),
@@ -109,10 +146,13 @@ export default function DesignList() {
       heightCm: Number(editForm.heightCm),
       quantity: Number(editForm.quantity),
       canRotate: editForm.canRotate,
+      ...(editForm.colorOverride !== '' || design.colorOverride != null
+        ? { colorOverride: editForm.colorOverride === '' ? null : editForm.colorOverride }
+        : {}),
     }
-    const localError = validateEditPatch(patch)
-    if (localError) {
-      setEditError(localError)
+    const errors = validateEditableDesignInput({ ...design, ...patch })
+    if (errors.length) {
+      setEditError(mapDomainErrorToSpanish(errors[0]))
       return
     }
 
@@ -135,7 +175,10 @@ export default function DesignList() {
       <h2 className="mb-4 text-lg font-semibold">Diseños</h2>
 
       {isLayoutStale && (
-        <p role="status" className="mb-3 rounded border border-amber-500/60 bg-amber-950/40 px-3 py-2 text-sm text-amber-100">
+        <p
+          role="status"
+          className="mb-3 rounded border border-amber-500/60 bg-amber-950/40 px-3 py-2 text-sm text-amber-100"
+        >
           El diseño cambió. Recalcula la plancha para actualizar el resultado.
         </p>
       )}
@@ -157,7 +200,7 @@ export default function DesignList() {
 
         <div>
           <label htmlFor="design-width-cm" className="mb-1 block text-sm">
-            Ancho (cm)
+            Ancho máximo (cm)
           </label>
           <input
             id="design-width-cm"
@@ -167,13 +210,13 @@ export default function DesignList() {
             value={widthCm}
             onChange={(e) => setWidthCm(e.target.value)}
             placeholder="ej. 10"
-            aria-label="Ancho en centímetros"
+            aria-label="Ancho máximo en centímetros"
             className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm"
           />
         </div>
         <div>
           <label htmlFor="design-height-cm" className="mb-1 block text-sm">
-            Alto (cm)
+            Alto máximo (cm)
           </label>
           <input
             id="design-height-cm"
@@ -183,7 +226,7 @@ export default function DesignList() {
             value={heightCm}
             onChange={(e) => setHeightCm(e.target.value)}
             placeholder="ej. 8"
-            aria-label="Alto en centímetros"
+            aria-label="Alto máximo en centímetros"
             className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm"
           />
         </div>
@@ -197,6 +240,14 @@ export default function DesignList() {
         >
           Importar diseño
         </button>
+        <p className="text-xs text-gray-400">
+          Puedes seleccionar varios archivos. Las medidas máximas se aplican a todos; después puedes
+          editar cada diseño.
+        </p>
+        <p className="text-xs text-gray-400">
+          Máximo 20 MiB y 32 millones de píxeles por diseño. En SVG, convierte texto a trazados; no
+          se admiten imágenes enlazadas, scripts ni patrones.
+        </p>
 
         {errorMessage && (
           <p role="alert" className="text-sm text-red-400">
@@ -226,7 +277,7 @@ export default function DesignList() {
                   </div>
                   <div>
                     <label htmlFor={`design-edit-width-${d.id}`} className="mb-1 block text-sm">
-                      Ancho solicitado (cm)
+                      Ancho máximo (cm)
                     </label>
                     <input
                       id={`design-edit-width-${d.id}`}
@@ -240,7 +291,7 @@ export default function DesignList() {
                   </div>
                   <div>
                     <label htmlFor={`design-edit-height-${d.id}`} className="mb-1 block text-sm">
-                      Alto solicitado (cm)
+                      Alto máximo (cm)
                     </label>
                     <input
                       id={`design-edit-height-${d.id}`}
@@ -266,6 +317,37 @@ export default function DesignList() {
                       className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
                     />
                   </div>
+                  <div>
+                    <label htmlFor={`design-edit-color-${d.id}`} className="mb-1 block text-sm">
+                      Color único (opcional)
+                    </label>
+                    <input
+                      id={`design-edit-color-${d.id}`}
+                      type="text"
+                      value={editForm.colorOverride}
+                      onChange={(e) => updateEditForm({ colorOverride: e.target.value })}
+                      placeholder="#RRGGBB"
+                      aria-describedby={`design-color-help-${d.id}`}
+                      aria-invalid={
+                        editError !== null && !isValidColorOverride(editForm.colorOverride || null)
+                      }
+                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                    />
+                    <p id={`design-color-help-${d.id}`} className="mt-1 text-xs text-gray-400">
+                      Formato #RRGGBB. Sustituye todos los colores y conserva la transparencia; no
+                      modifica el archivo original.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateEditForm({ colorOverride: '' })
+                        setEditError(null)
+                      }}
+                      className="mt-1 rounded border border-gray-500 px-2 py-1"
+                    >
+                      Usar colores originales
+                    </button>
+                  </div>
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -275,7 +357,8 @@ export default function DesignList() {
                     Permitir rotación
                   </label>
                   <p className="text-xs text-gray-400">
-                    La celda solicitada define el espacio ocupado; el arte se ajusta proporcionalmente sin deformarse.
+                    Las medidas máximas limitan el tamaño del arte, que se ajusta proporcionalmente
+                    sin deformarse. Solo su rectángulo visible ocupa espacio en la plancha.
                   </p>
                   {editError && (
                     <p role="alert" className="text-sm text-red-400">
@@ -283,10 +366,20 @@ export default function DesignList() {
                     </p>
                   )}
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => saveEdit(d.id)} aria-label="Guardar cambios" className="rounded bg-blue-600 px-2 py-1 text-white">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(d.id)}
+                      aria-label="Guardar cambios"
+                      className="rounded bg-blue-600 px-2 py-1 text-white"
+                    >
                       Guardar
                     </button>
-                    <button type="button" onClick={cancelEdit} aria-label="Cancelar edición" className="rounded border border-gray-500 px-2 py-1">
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      aria-label="Cancelar edición"
+                      className="rounded border border-gray-500 px-2 py-1"
+                    >
                       Cancelar
                     </button>
                   </div>
@@ -294,29 +387,65 @@ export default function DesignList() {
               ) : (
                 <div className="space-y-2">
                   <div>
-                    {d.name} ({d.widthCm} × {d.heightCm} cm) ×{d.quantity}
+                    {d.name} (máximo {d.widthCm} × {d.heightCm} cm) ×{d.quantity}
                   </div>
+                  <p className="text-xs text-gray-300">
+                    Arte visible:{' '}
+                    {getFittedVisibleSizeCm(d, d.originalAspectRatio).widthCm.toFixed(2)} ×{' '}
+                    {getFittedVisibleSizeCm(d, d.originalAspectRatio).heightCm.toFixed(2)} cm ·{' '}
+                    {d.canRotate ? 'rotación permitida' : 'sin rotación'}
+                  </p>
+                  {d.colorOverride && (
+                    <p className="text-xs text-gray-300">
+                      Color único: {d.colorOverride.toUpperCase()}
+                    </p>
+                  )}
                   {pendingDeleteId === d.id ? (
                     <div className="space-y-2 rounded border border-red-500/50 p-2">
                       <p>¿Eliminar este diseño?</p>
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => confirmDelete(d.id)} aria-label="Confirmar eliminación" className="rounded bg-red-600 px-2 py-1 text-white">
+                        <button
+                          type="button"
+                          onClick={() => confirmDelete(d.id)}
+                          aria-label="Confirmar eliminación"
+                          className="rounded bg-red-600 px-2 py-1 text-white"
+                        >
                           Eliminar
                         </button>
-                        <button type="button" onClick={() => setPendingDeleteId(null)} aria-label="Cancelar eliminación" className="rounded border border-gray-500 px-2 py-1">
+                        <button
+                          type="button"
+                          onClick={() => setPendingDeleteId(null)}
+                          aria-label="Cancelar eliminación"
+                          className="rounded border border-gray-500 px-2 py-1"
+                        >
                           Cancelar
                         </button>
                       </div>
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => startEdit(d)} aria-label={`Editar ${d.name}`} className="rounded border border-gray-500 px-2 py-1">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(d)}
+                        aria-label={`Editar ${d.name}`}
+                        className="rounded border border-gray-500 px-2 py-1"
+                      >
                         Editar
                       </button>
-                      <button type="button" onClick={() => duplicateDesign(d.id)} aria-label={`Duplicar ${d.name}`} className="rounded border border-gray-500 px-2 py-1">
+                      <button
+                        type="button"
+                        onClick={() => duplicateDesign(d.id)}
+                        aria-label={`Duplicar ${d.name}`}
+                        className="rounded border border-gray-500 px-2 py-1"
+                      >
                         Duplicar
                       </button>
-                      <button type="button" onClick={() => setPendingDeleteId(d.id)} aria-label={`Eliminar ${d.name}`} className="rounded border border-red-500 px-2 py-1 text-red-300">
+                      <button
+                        type="button"
+                        onClick={() => setPendingDeleteId(d.id)}
+                        aria-label={`Eliminar ${d.name}`}
+                        className="rounded border border-red-500 px-2 py-1 text-red-300"
+                      >
                         Eliminar
                       </button>
                     </div>
@@ -331,26 +460,12 @@ export default function DesignList() {
   )
 }
 
-function validateEditPatch(patch: DesignUpdatePatch): string | null {
-  if (typeof patch.name !== 'string' || patch.name.trim().length === 0) {
-    return 'El nombre es obligatorio.'
-  }
-  if (!Number.isInteger(patch.widthCm) || Number(patch.widthCm) < 1) {
-    return 'El ancho solicitado debe ser un número entero mayor que 0.'
-  }
-  if (!Number.isInteger(patch.heightCm) || Number(patch.heightCm) < 1) {
-    return 'El alto solicitado debe ser un número entero mayor que 0.'
-  }
-  if (!Number.isInteger(patch.quantity) || Number(patch.quantity) < 1) {
-    return 'La cantidad debe ser al menos 1.'
-  }
-  return null
-}
-
 function mapDomainErrorToSpanish(error: DomainValidationError | undefined): string {
+  if (error?.field === 'colorOverride')
+    return 'El color debe tener el formato #RRGGBB (seis dígitos hexadecimales).'
   if (error?.field === 'quantity') return 'La cantidad debe ser al menos 1.'
   if (error?.field === 'name') return 'El nombre es obligatorio.'
-  if (error?.field === 'widthCm') return 'El ancho solicitado debe ser un número entero mayor que 0.'
-  if (error?.field === 'heightCm') return 'El alto solicitado debe ser un número entero mayor que 0.'
+  if (error?.field === 'widthCm') return 'El ancho máximo debe ser un número entero mayor que 0.'
+  if (error?.field === 'heightCm') return 'El alto máximo debe ser un número entero mayor que 0.'
   return 'No se pudieron guardar los cambios del diseño.'
 }

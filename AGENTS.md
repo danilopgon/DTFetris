@@ -9,7 +9,7 @@ DTFetris es una aplicación de escritorio local, single-user, para automatizar l
 | Área | Stack actual |
 |---|---|
 | Desktop shell | Tauri 2 |
-| Frontend | Vite 5 + React 18 + TypeScript 5 |
+| Frontend | Vite 6 + React 18 + TypeScript 5 |
 | Estado | Zustand 5 |
 | Preview | React Konva + Konva |
 | Estilos | Tailwind CSS 3 |
@@ -50,6 +50,10 @@ Usa [docs/README.md](docs/README.md) como índice y router documental único. No
 | `cargo test` desde `src-tauri` | Tests Rust. |
 
 ## Antes de editar
+
+- Flujo autónomo ligero: leer requisitos, elegir el siguiente incremento en `docs/roadmap.md`, implementar con tests, revisar y registrar evidencia real en el roadmap.
+- No se requieren propuestas, especificaciones duplicadas ni aprobaciones por tamaño del diff. Mantén commits coherentes y no declares completado un flujo sin verificarlo.
+- Conserva el trabajo ajeno; no modifiques datos reales ni recursos externos para probar la app.
 
 - Verifica el documento de requisitos correspondiente.
 - Si cambias comportamiento, actualiza docs junto al código.

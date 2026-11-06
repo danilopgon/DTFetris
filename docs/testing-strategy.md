@@ -1,131 +1,109 @@
-# Estrategia de Testing
+# Estrategia de testing
 
-La estrategia cubre todas las capas de la pirámide. El testing de packing y dominio arranca en v0.1, no se pospone.
+Prioridad: evitar medidas físicas incorrectas, copias perdidas, solapamientos, deformación, datos perdidos y exportaciones que anuncien un éxito falso.
 
-## Cobertura por capa
+## Capas y evidencia
 
-| Capa | Herramienta | Propósito |
+| Capa | Runner | Qué acredita |
 |---|---|---|
-| Unit Rust | `cargo test`, `#[cfg(test)]` | Dominio, packing, serialización y métricas. |
-| Unit TypeScript | Vitest | Unidades, aspect ratio y lógica de estado. |
-| Integración Tauri commands | `tauri::test` | Invocación end-to-end dentro del proceso Tauri. |
-| Componentes React | React Testing Library | Formularios, listas, métricas y preview. |
-| E2E + visual regression | Playwright + WebDriver | Flujos completos y estabilidad visual. |
+| Dominio/archivos Rust | `cargo test` desde `src-tauri` | Packing real, importación, rasterización, composición PNG y persistencia con fixtures propios. |
+| IPC Rust | `tauri::test`, dentro de `cargo test` | Payloads camelCase y serialización de commands en mock runtime Tauri; no diálogos ni WebView2 real. |
+| Unidades/estado/componentes | `npm run test` | Reglas TS, redondeo, invalidación, formularios, toolbar, preview y métricas. Los comandos se simulan en estas pruebas. |
+| Flujo web | `npm run test:e2e` | UI real en Chromium/Vite, **IPC y diálogos simulados** explícitamente en `tests/e2e/browser-mocks.ts`. No acredita escritura de archivos ni escritorio nativo. |
+| Escritorio nativo (opt-in, Windows) | `npm run test:native` tras `npx tauri build --no-bundle` | EXE de producción con WebView2 e IPC Tauri reales, selector y diálogos de guardado/exportación **reales de Windows**, cierre y reapertura, recuperación del JSON y reexportación. Verifica los archivos de forma independiente. |
+| Build | `npm run build:frontend`, `npm run build` | Compilación TypeScript/Vite y producción Tauri/MSI/NSIS respectivamente. |
 
-## Unit tests Rust
+### Prueba nativa del EXE
 
-Cobertura mínima:
+`tests/native/native-check.mjs` lanza el EXE de producción sin cambios en la build. Solo para ese proceso hijo define `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` con los argumentos por defecto de wry más `--remote-debugging-port` en un puerto local aleatorio. Playwright se conecta por CDP (`connectOverCDP`) a la página `tauri.localhost`. `tests/native/uia.ps1` maneja los diálogos comunes de Windows con UI Automation, filtrando por el PID del EXE, nunca por títulos localizados. En este Windows, sus controles aparecen como `Pane`, así que se localizan por AutomationId + clase Win32 (`1148`/`1001` `Edit`, `1` `Button`) y se accionan con `WM_SETTEXT`/`BM_CLICK`. La ventana se cierra con `WindowPattern.Close` y se comprueba que el proceso termina.
 
-- Algoritmo MaxRects: ausencia de solapamientos y respeto de límites.
-- Rotación: los diseños rotan correctamente cuando `can_rotate = true`.
-- Multipágina: se generan nuevas hojas cuando la plancha se llena.
-- Cálculo de áreas: métricas por plancha y globales.
-- Transparencia: el padding transparente no cuenta como área ocupada y las dimensiones configuradas aplican al arte visible.
-- Repacking: el resultado es consistente ante modificaciones.
-- Serialización: los structs se serializan y deserializan correctamente con `serde`.
-- Paridad JSON Rust/TypeScript: los contratos Tauri usan claves `camelCase` mediante `#[serde(rename_all = "camelCase")]` y tests de round-trip con `serde_json`.
-- Validación defensiva de packing: dimensiones en centímetros enteros positivos y al menos un diseño con `quantity > 0` antes de ejecutar packing.
-- Validación de aspect ratio: detección de deformación usando los límites visibles detectados en PNG y SVG rasterizado.
+Escenario: PNG 2:1 con padding/agujero transparentes y SVG sintéticos generados en una carpeta temporal; importación múltiple desde el selector; plancha de 20 × 20 cm con 10 mm de separación; cantidades 3 y 2, rotación y color `#c0c0c0`; generar, guardar y exportar; cerrar; reabrir, recuperar, generar y exportar con otro nombre. Comprueba:
 
-Ejemplos de casos:
+- el JSON (hoja, cantidades, color, rotación, assets dentro de `design-assets`);
+- el arte real en la vista previa. Las imágenes del protocolo de assets *taintean* el canvas y `getImageData` falla, así que se analiza una captura CDP del canvas. La app no lee píxeles: colorea con composición del canvas;
+- los PNG con un decodificador propio, independiente del código Rust: 2362 px por lado, `pHYs` de 11811 px/m, transparencia, colores opacos exactos y que las dos exportaciones son idénticas píxel a píxel;
+- la composición física en el PNG: componentes conexos con alpha > 0 (los fragmentos contenidos en la caja de otro, como el halo de remuestreo en un agujero, cuentan como parte de ese diseño), tamaños de bbox visibles de 8 cm = 945 px, número de logos rotados y separación mínima entre cajas ≥ 117 px (10 mm = 118,1 px);
+- ausencia de errores de consola, de página y de red.
 
-```rust
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn no_overlaps_after_packing() { ... }
+`design-assets` no se puede redirigir, porque Tauri lo resuelve con la API del Shell, no con `APPDATA`. La prueba registra SHA-256 de los archivos previos y elimina **solo** los assets que referencia el trabajo JSON que ella misma guardó. Otro archivo nuevo, como una importación real simultánea por MCP o desde la UI, se informa y no se toca. Si la prueba falla antes de guardar, no borra nada. Falla si algún archivo preexistente cambia. Capturas, `resultado.json` y `registro.log` quedan en `%TEMP%\dtfetris-native-*`. Abre ventanas y diálogos en el escritorio: no usar el ratón durante la ejecución (≈1 min). No sustituye la aprobación visual ni la prueba física en el RIP.
 
-    #[test]
-    fn no_design_exceeds_sheet_bounds() { ... }
+Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDriver para una aplicación nativa; la prueba nativa usa CDP sobre WebView2, no el esquema de Tauri. La configuración E2E sirve Vite en HTTP. El test web incluye una referencia visual Windows deliberadamente revisada; en otros sistemas habrá que generar y revisar su snapshot de plataforma, no aceptarlo automáticamente. El backend de impresión se verifica con PNG reales en Rust, separado de los mocks web.
 
-    #[test]
-    fn correct_quantity_placed() { ... }
+## Casos críticos
 
-    #[test]
-    fn new_sheet_created_when_full() { ... }
+### Packing
 
-    #[test]
-    fn rotation_respects_can_rotate_flag() { ... }
-}
+- Ajuste exacto, mosaico, cantidades, overflow y multipágina sin hojas vacías.
+- Rotación opcional y bloqueada; copia imposible explícita.
+- Límites físicos y no solapamiento; conservación del total de copias.
+- Petición vacía, cantidades cero mixtas, dimensiones inválidas, IDs duplicados y límites operativos.
+- Misma composición ante reordenamiento del mismo conjunto; 80 fixtures pseudoaleatorios reproducibles.
+- Bbox visible ajustado en cm fraccionarios (no celda sobrante), punto fijo a 1 micrómetro, separación de 3 mm y ajuste exacto al borde sin margen exterior forzado.
+
+### Exportación
+
+- Archivo predeterminado real **60 × 100 cm → 7087 × 11811 px**; lectura posterior de cabecera y filas.
+- Política `round(cm * 300 / 2.54)` y `pHYs` 11811 píxeles/metro, equivalentes aproximadamente a 300 DPI.
+- PNG con alpha, padding, recorte, centrado proporcional, posición y rotación, incluyendo celda no cuadrada.
+- Remuestreo de transparencia sin contaminación RGB invisible y SVG sin oscurecer colores por alpha premultiplicado.
+- PNG/SVG mixtos y multipágina; nombres de archivo, creación exclusiva y rollback solo de archivos propios.
+- Falta de copias, metadatos/layout inválidos, archivos ausentes/corruptos y guardas de asignación.
+
+### Persistencia
+
+- JSON versionado conserva solo entradas; layout se regenera al abrir.
+- PNG/SVG importados, rutas compartidas y nombres repetidos permitidos; IDs únicos.
+- JSON inválido, versión desconocida, límites de recursos y assets desaparecidos/corruptos.
+- Fallos de escritura/reemplazo conservan trabajo previo; no sobrescribir assets.
+- Flujo integrado guardar → recuperar → packing → exportar, comparando archivos reales.
+
+### Frontend
+
+- Selección múltiple secuencial, errores parciales/reintento y cancelación de diálogo.
+- Edición entera positiva, cantidad mínima 1, duplicado y eliminación confirmada.
+- Cambio de plancha aplica explícitamente dimensiones válidas; campos pendientes bloquean generar/guardar/exportar.
+- Generación rechaza petición vacía y libera loading ante fallos; descarta respuestas antiguas.
+- Importación pendiente no contamina un trabajo restaurado.
+- Preview por plancha, recorte normalizado, rotación, imagen ausente y callback obsoleto.
+- Área visible y reservada diferenciadas; métricas por hoja/globales.
+
+### SVG con viewport fraccionario
+
+- Regresión de la revisión de la PR: un cuadrado de 10 × 10 en un viewport de 10,1 × 10 conserva la proporción 1 al importar y se exporta igual de ancho que de alto.
+- La vista previa (`getPreviewCrop`) pasa de bounds a unidades del original con un factor uniforme y de ahí a la miniatura por eje. Regresión: un logo en una miniatura coloreada redondeada por eje (1000 × 101 → 512 × 52) no se desplaza.
+- Packing: el ruido de coma flotante en un límite exacto (15,000000000000002 cm) no añade una unidad y no rechaza un diseño que cabe justo.
+
+### Color único
+
+- Validación estricta `#RRGGBB` en TS/Rust; ausente/null mantiene originales. Se rechazan abreviaturas, nombres y hex con alpha.
+- Composición PNG/SVG con un solo color y transparencia idéntica; prueba de los 256 valores alpha posibles, fuentes intactas y retirada de sobrescritura.
+- Guardar/cargar mantiene color; JSON v1 anterior sin campo sigue siendo válido.
+- Canvas real de Chromium: PNG y SVG coloreados, alpha parcial, borrado del color y payload de exportación. Las miniaturas solo se usan para preview; no sustituyen los tests de archivos Rust.
+
+### Agente externo
+
+- Handshake y framing MCP stdio, schemas de herramientas, errores y línea acotada; nada ajeno al protocolo en stdout.
+- Ingesta determinista, rutas canónicas restringidas, rechazo de escapes y nombres de destino fuera del workspace.
+- Mutaciones/errores atómicos, layout invalidado, exportación con confirmación explícita y no sobreescritura de PNG.
+- Flujo de trabajo real desde herramientas: importar → editar color/cantidad → packing → guardar/recuperar → exportar con fixtures privados. No configura ni llama a un LLM externo para los tests.
+- Regiones de PNG (`domain::regions` y MCP): orden de lectura, agrupación por distancia configurable, halo contenido en un agujero, recorte con píxeles y alpha exactos y enmascarado de regiones intermedias, rechazo de fondo opaco/índices/rectángulos fuera de rango, vista NO-IMPRIMIR sin sobrescritura, original intacto y ningún asset creado ante errores; `detectionId` obligatorio y rechazado si el PNG cambió o es falso; regresión con una plancha real de 60 × 100 cm exportada por el MCP, con piezas en las esquinas, separada de nuevo y recortada (≈70 s en debug, ≈4,5 s en release).
+- SVG 1.1 con `DOCTYPE` externo inerte aceptado sin fetch; rechazo de subconjuntos internos/entidades/DOCTYPE duplicado y errores de importación con detalle útil en MCP.
+
+## Validación de negocio local
+
+Una prueba real adicional preparó 8 diseños y 44 copias, con dos colores y 3 mm entre piezas. El agente separó vectorialmente un SVG compuesto fuera de DTFetris, verificando sus trazados. Se generaron por MCP un control de 60 × 100 y un candidato de 60 × 86 cm sin reducir las medidas visibles, comparados localmente con una referencia aceptada por el usuario. Se comprobaron cantidades, límites, separación, hashes de originales, recuperación del trabajo, PNG/DPI/alpha/colores y bboxes de las 44 piezas. No se incluyen los originales privados en los tests ni en Git. Esto **no equivale a aprobación visual del usuario ni a impresión física**.
+
+## Verificación de una entrega
+
+```text
+pnpm install --frozen-lockfile
+npm run test
+npm run lint
+npm run build:frontend
+npm run test:e2e
+cargo test                 (en src-tauri)
+cargo fmt --check          (en src-tauri)
+npm run build
 ```
 
-## Unit tests TypeScript
-
-Cobertura mínima:
-
-- Contratos de dominio: centímetros enteros positivos, rechazo de decimales/cero/negativos y códigos técnicos estables.
-- Validación editable vs generación: `quantity: 0` se rechaza en edición; ocultar/excluir deberá ser un control explícito futuro.
-- Ajuste proporcional: `getFittedVisibleSizeCm` conserva la celda solicitada y deriva un tamaño visible interno sin deformar.
-- Estado Zustand: plancha inicial de 55 cm x 100 cm y sincronización de configuración personalizada.
-- Conversion cm a px para distintos DPI.
-- Cálculo de aspect ratio original.
-- Detección de límites visibles en diseños con transparencia.
-- Detección de deformación por diferencia entre aspect ratio original y configurado.
-- Lógica de estado Zustand: añadir, editar, eliminar y duplicar diseños; mutaciones válidas limpian planchas, marcan layout pendiente y no invocan `run_packing` placeholder.
-- Generación de IDs únicos.
-
-## Tests de integración Tauri commands
-
-Verifican que los comandos expuestos al frontend funcionan correctamente end-to-end dentro del proceso Tauri, incluyendo serialización y manejo de errores.
-
-Cobertura mínima:
-
-- `run_packing`: recibe `PackingRequest`, valida el contrato de dominio y devuelve `PackingResult` con `sheets` y `unplacedItems`.
-- `export_png`: genera el archivo en la ruta especificada.
-- `export_png`: respeta que el arte visible, no el canvas transparente, ocupe las dimensiones físicas configuradas.
-- `save_job` y `load_job`: el estado guardado se recupera íntegro.
-- Manejo de errores: rutas inválidas, diseños mal formados y permisos de escritura.
-
-```rust
-#[cfg(test)]
-mod integration {
-    use tauri::test::{mock_builder, MockRuntime};
-
-    #[test]
-    fn run_packing_returns_valid_sheets() {
-        let app = mock_builder().build().unwrap();
-        // invocar comando y verificar resultado
-    }
-}
-```
-
-## Component tests React
-
-Cobertura mínima:
-
-- Formulario de diseño: validaciones en español, edición de celda solicitada, cantidad mínima `1` y rotación.
-- Lista de diseños: renderizado, duplicado, confirmación/cancelación de eliminación y estado de recálculo pendiente.
-- Panel de métricas: valores por plancha y globales.
-- Preview de planchas: renderizado correcto del número de hojas.
-- Flujo de importación (`DesignList`): botón visible, inputs de cm positivos, estado de carga durante import, mapeo de códigos de error a mensajes en español, cancelación de diálogo sin efecto.
-
-El archivo de test es `src/components/DesignList/DesignList.test.tsx`. Usa React Testing Library con `@testing-library/user-event`. Los mocks cubren `@tauri-apps/plugin-dialog` (función `open`) y `../../store/useAppStore` (selector-aware mock con `importDesign`, `updateDesign`, `duplicateDesign` y `removeDesign` como `vi.fn()`). La función `mapImportErrorToMessage` se extrae como función pura y se testea sin mocks.
-
-## E2E + visual regression
-
-Playwright se conecta a la ventana Tauri mediante WebDriver. Los escenarios cubren flujos completos de usuario.
-
-Los tests E2E de importación (E2E-001, E2E-002) están diferidos al roadmap posterior a `v0-1-design-import`. El flujo de importación se valida con RTL a nivel de componente y con `cargo test` a nivel de Rust. No son un bloqueador del runner actual.
-
-| ID | Escenario |
-|---|---|
-| E2E-001 | Importación de un diseño PNG. (diferido — roadmap posterior) |
-| E2E-002 | Importación de un diseño SVG y verificación de aspect ratio desde límites visibles. (diferido) |
-| E2E-003 | Packing básico con un único diseño. |
-| E2E-004 | Packing multipágina. |
-| E2E-005 | Modificación de cantidad y repacking automático. |
-| E2E-006 | Rotación activada/desactivada y resultado en plancha. |
-| E2E-007 | Exportación PNG con inputs mixtos PNG + SVG. |
-| E2E-008 | Guardado y recuperación de trabajo. |
-| E2E-009 | Advertencia de deformación de aspecto. |
-| E2E-010 | Diseño con padding transparente se imprime con el arte visible al tamaño configurado. |
-
-Visual regression es obligatoria mediante snapshots de Playwright.
-
-Objetivos:
-
-- Detectar desplazamientos en la preview de planchas.
-- Detectar cambios inesperados en el layout.
-- Validar que el repacking no produce renders rotos.
-
-Cualquier cambio visual deliberado requerirá actualización explícita de snapshots.
+Registrar comandos/resultados reales en el roadmap y la revisión final. Un timeout o un comando no ejecutado nunca cuenta como aprobado. El flujo nativo con diálogos reales se acredita con `npm run test:native` en Windows, no a partir de Chromium ni de la compilación. La impresión física se valida por separado con la guía manual.

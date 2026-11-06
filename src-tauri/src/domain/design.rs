@@ -42,6 +42,26 @@ pub struct DesignInput {
     pub original_aspect_ratio: f64,
     pub quantity: u32,
     pub can_rotate: bool,
+    /// Optional solid RGB replacement; source artwork and alpha remain unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_override: Option<String>,
+}
+
+/// Parse the shared optional color contract without trimming or accepting shorthand.
+pub fn parse_color_override(value: Option<&str>) -> Result<Option<[u8; 3]>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let bytes = value.as_bytes();
+    if bytes.len() != 7 || bytes[0] != b'#' || !bytes[1..].iter().all(u8::is_ascii_hexdigit) {
+        return Err("El color debe tener el formato hexadecimal #RRGGBB.".into());
+    }
+    let mut rgb = [0; 3];
+    for (index, channel) in rgb.iter_mut().enumerate() {
+        *channel = u8::from_str_radix(&value[1 + index * 2..3 + index * 2], 16)
+            .map_err(|_| "El color debe tener el formato hexadecimal #RRGGBB.".to_string())?;
+    }
+    Ok(Some(rgb))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,15 +78,59 @@ pub struct Placement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Sheet {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gap_cm: Option<f64>,
     pub id: String,
     pub width_cm: f64,
     pub height_cm: f64,
     pub placements: Vec<Placement>,
 }
 
+/// Requested dimensions are a maximum box, never a stretch instruction.
+pub fn fitted_visible_size_cm(design: &DesignInput) -> Result<(f64, f64), String> {
+    let b = &design.visible_bounds;
+    let values = [
+        b.x_px,
+        b.y_px,
+        b.width_px,
+        b.height_px,
+        b.source_width_px,
+        b.source_height_px,
+    ];
+    if !values
+        .iter()
+        .all(|v| v.is_finite() && *v >= 0.0 && v.fract() == 0.0)
+        || b.width_px <= 0.0
+        || b.height_px <= 0.0
+        || b.x_px + b.width_px > b.source_width_px
+        || b.y_px + b.height_px > b.source_height_px
+        || !design.original_aspect_ratio.is_finite()
+        || design.original_aspect_ratio <= 0.0
+        || (design.original_aspect_ratio - b.width_px / b.height_px).abs()
+            > 1e-10 * (b.width_px / b.height_px)
+        || ![design.width_cm, design.height_cm]
+            .iter()
+            .all(|v| v.is_finite() && *v > 0.0 && v.fract() == 0.0 && *v <= u32::MAX as f64)
+    {
+        return Err("Las medidas o metadatos visibles del diseño no son válidos.".into());
+    }
+    let ratio = design.original_aspect_ratio;
+    if design.width_cm / design.height_cm <= ratio {
+        Ok((
+            design.width_cm,
+            (design.width_cm / ratio).min(design.height_cm),
+        ))
+    } else {
+        Ok((
+            (design.height_cm * ratio).min(design.width_cm),
+            design.height_cm,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DesignInput, ImageFormat, Placement, Sheet, VisibleBounds};
+    use super::{parse_color_override, DesignInput, ImageFormat, Placement, Sheet, VisibleBounds};
     use serde_json::json;
 
     fn sample_visible_bounds() -> VisibleBounds {
@@ -78,6 +142,56 @@ mod tests {
             source_width_px: 120.0,
             source_height_px: 80.0,
         }
+    }
+
+    #[test]
+    fn color_override_accepts_only_exact_six_digit_hex_and_none() {
+        assert_eq!(parse_color_override(None).unwrap(), None);
+        assert_eq!(
+            parse_color_override(Some("#aB09fF")).unwrap(),
+            Some([171, 9, 255])
+        );
+        assert_eq!(parse_color_override(Some("#000000")).unwrap(), Some([0; 3]));
+        assert_eq!(
+            parse_color_override(Some("#FFFFFF")).unwrap(),
+            Some([255; 3])
+        );
+        for invalid in [
+            "",
+            "red",
+            "#abc",
+            "123456",
+            "#12345678",
+            " #123456",
+            "#123456\n",
+            "#gg0000",
+            "#１２３",
+            "#é0000",
+        ] {
+            assert!(parse_color_override(Some(invalid)).is_err(), "{invalid:?}");
+        }
+    }
+
+    #[test]
+    fn old_design_json_defaults_to_none_and_clear_omits_override() {
+        let old = json!({
+            "id": "d", "name": "Logo", "imagePath": "logo.png",
+            "widthCm": 12, "heightCm": 8, "format": "png",
+            "visibleBounds": sample_visible_bounds(), "originalAspectRatio": 1.5,
+            "quantity": 1, "canRotate": true
+        });
+        let mut design: DesignInput = serde_json::from_value(old.clone()).unwrap();
+        assert!(design.color_override.is_none());
+        design.color_override = Some("#12abEF".into());
+        assert_eq!(
+            serde_json::to_value(&design).unwrap()["colorOverride"],
+            "#12abEF"
+        );
+        design.color_override = None;
+        assert!(serde_json::to_value(&design)
+            .unwrap()
+            .get("colorOverride")
+            .is_none());
     }
 
     #[test]
@@ -93,6 +207,7 @@ mod tests {
             original_aspect_ratio: 1.5,
             quantity: 2,
             can_rotate: true,
+            color_override: None,
         };
 
         let value = serde_json::to_value(design).expect("design serializes");

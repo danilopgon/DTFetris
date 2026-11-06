@@ -7,7 +7,7 @@ DTFetris es una aplicación de escritorio Tauri 2 con frontend React/TypeScript 
 | Capa | Tecnología |
 |---|---|
 | Shell de escritorio | Tauri 2 |
-| Frontend | Vite 5, React 18, TypeScript 5 |
+| Frontend | Vite 6, React 18, TypeScript 5 |
 | Estado | Zustand 5 |
 | Preview | React Konva + Konva |
 | Estilos | Tailwind CSS 3 |
@@ -55,8 +55,8 @@ Los errores se modelan como `Result<T, String>` en Rust y se mapean a `Promise` 
 ### Comando de importación
 
 ```rust
-#[tauri::command]
-async fn import_design(
+#[tauri::command(async)]
+fn import_design(
     app: AppHandle,
     source_path: String,
     width_cm: f64,
@@ -65,10 +65,10 @@ async fn import_design(
 ```
 
 ```typescript
-// El componente abre el diálogo primero, luego llama al comando:
-const path = await open({ multiple: false, filters: [{ name: 'Imágenes', extensions: ['png', 'svg'] }] })
-if (path) {
-  const design = await invoke<DesignInput>('import_design', { sourcePath: path, widthCm, heightCm })
+// El componente abre el diálogo y procesa cada ruta secuencialmente:
+const paths = await open({ multiple: true, filters: [{ name: 'Imágenes', extensions: ['png', 'svg'] }] })
+for (const sourcePath of paths ? (Array.isArray(paths) ? paths : [paths]) : []) {
+  const design = await invoke<DesignInput>('import_design', { sourcePath, widthCm, heightCm })
 }
 ```
 
@@ -84,6 +84,10 @@ La persistencia es responsabilidad exclusiva del backend Rust.
 
 Esto elimina la necesidad de `IndexedDB` y resuelve el problema de serialización de objetos `File` del navegador.
 
+El contrato es `Job { version: 1, sheetConfig, designs }`. No se confía en placements persistidos: al recuperar se exige recalcular. `save_job({ job, path })` reemplaza atómicamente el JSON elegido en diálogo; `load_job({ path })` valida versión, entradas y archivos antes de devolver el trabajo. Assets siguen en los datos privados de DTFetris; un JSON no es un paquete portable entre equipos.
+
+`domain/assets.rs` centraliza lectura acotada, formato, límites visibles y política SVG. Se usa al importar, guardar/recuperar y exportar. Importación, packing y persistencia usan `#[tauri::command(async)]`; exportación usa `async` + `spawn_blocking`. El frontend bloquea acciones incompatibles y descarta respuestas que pertenecen a un trabajo anterior.
+
 ## Exportación PNG
 
 La composición de la imagen final se realiza en Rust con la crate `image`, operando directamente sobre píxeles en memoria.
@@ -94,6 +98,21 @@ Para inputs SVG, la crate `image` no puede rasterizar directamente. El pipeline 
 2. `image` composita el bitmap resultante en la plancha junto al resto de diseños.
 
 El output siempre es PNG, independientemente del formato de entrada.
+
+`export_png({ sheets, designs, outputPath })` devuelve `string[]` con rutas reales. Valida todas las copias/placements/assets antes de componer, procesa una plancha en cada iteración y crea archivos exclusivamente (sin sobrescribir). PNG declara densidad con `png::Encoder`; `image` realiza recorte, escala, rotación y composición.
+
+## Preview y seguridad local
+
+- Konva representa todas las hojas; carga una imagen por ruta compartida con `convertFileSrc`, recorta límites normalizados y aplica ajuste centrado/rotación iguales a exportación.
+- Protocolo asset habilitado únicamente para `$APPDATA/design-assets/**`; CSP permite el origen local de imágenes y el IPC necesario, no recursos remotos arbitrarios.
+- Permisos de diálogo: abrir, guardar y confirmar. No se añaden servicios externos.
+- Windows/MSVC: el runner unitario que enlaza comandos Tauri necesita manifiesto common-controls v6; `build.rs` lo genera sin duplicar el manifiesto ya incorporado por Tauri para binarios.
+
+## Adaptador de agente externo
+
+El binario independiente `dtfetris-mcp` comunica por stdin/stdout con un cliente MCP. Reutiliza los servicios existentes de importación, packing, persistencia y exportación; solo añade validación de argumentos/rutas y estado de sesión. No necesita crear un `AppHandle`, abrir ventanas ni escuchar en red. Resuelve el directorio de assets con la misma base e identificador de `tauri.conf.json` que Tauri.
+
+La integración entre agente e interfaz se realiza mediante `Job` JSON, no mediante un segundo store sincronizado. La carpeta de ingesta se autoriza al arrancar el servidor y los destinos se restringen al workspace. Los logs no contaminan stdout. Ver [agent-integration.md](./agent-integration.md).
 
 ## Estructura de código relevante
 

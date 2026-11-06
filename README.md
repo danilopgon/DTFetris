@@ -6,14 +6,14 @@
 
 Aplicación de escritorio para automatizar la composición de planchas DTF. Distribuye diseños en una o más hojas de impresión mediante un algoritmo de packing automático, eliminando el cálculo manual de grids, duplicación y posicionado.
 
-**Local, single-user, sin backend.**
+**Local, single-user, sin servidor remoto.**
 
 ## Stack
 
 | Capa | Tecnología |
 |---|---|
 | Shell | Tauri 2 |
-| Frontend | Vite 5 + React 18 + TypeScript 5 |
+| Frontend | Vite 6 + React 18 + TypeScript 5 |
 | Estado | Zustand 5 |
 | Preview canvas | React Konva |
 | Estilos | Tailwind CSS 3 |
@@ -37,6 +37,28 @@ pnpm dev
 ```
 
 `tauri dev` compila el backend Rust y levanta el servidor Vite juntos.
+
+## Uso del MVP
+
+1. Seleccionar PNG/SVG e importar con su celda física en cm.
+2. Editar cantidades, dimensiones y rotación; duplicar o eliminar cuando haga falta.
+3. Configurar la plancha (inicial: **60 × 100 cm**) y pulsar **Generar planchas**.
+4. Revisar todas las hojas y el aprovechamiento. Corregir cualquier copia que no quepa.
+5. Exportar PNG a **300 DPI** y guardar el trabajo como JSON para recuperarlo después.
+
+Las medidas de diseño son máximos: el arte conserva proporción y packing reserva su tamaño visible, sin la celda sobrante. Separación configurable, inicialmente **3 mm**. A tamaño inicial, la salida es **7087 × 11811 píxeles**, con transparencia. Varias planchas reciben sufijos `-001`, `-002`, etc.; no se sobrescriben PNG existentes.
+
+Los diseños se copian a los datos privados de la aplicación. Conservar esa carpeta junto con el JSON: el trabajo no incorpora las imágenes ni es un paquete portable. Los SVG deben convertir texto a trazados; ver límites y comprobación de impresión en [la guía de trabajo real](docs/manual-dtf-check.md).
+
+Al editar un diseño se puede aplicar un **color único `#RRGGBB`** a PNG/SVG, conservando transparencia, o volver a los colores originales. El color se conserva al duplicar y guardar el trabajo.
+
+### Preparar trabajos con tu agente
+
+`npm run build:mcp` genera `src-tauri/target/release/dtfetris-mcp.exe`: servidor MCP local para un cliente/agente externo, con carpeta de ingesta y workspace explícitos. Permite preparar medidas, cantidades, colores y composiciones con lenguaje natural y abrir el JSON resultante en DTFetris para revisión. No incorpora chat ni credenciales. Configuración y límites en [agent-integration.md](docs/agent-integration.md).
+
+### Producción en Windows
+
+`pnpm build` genera instaladores MSI/NSIS en `src-tauri/target/release/bundle/` y el ejecutable `src-tauri/target/release/dtf-sheet-optimizer.exe`. Requiere WebView2. No hace falta Node/Rust para utilizar la aplicación ya compilada.
 
 ## Comandos
 
