@@ -10,9 +10,23 @@ Prioridad: evitar medidas físicas incorrectas, copias perdidas, solapamientos, 
 | IPC Rust | `tauri::test`, dentro de `cargo test` | Payloads camelCase y serialización de commands en mock runtime Tauri; no diálogos ni WebView2 real. |
 | Unidades/estado/componentes | `npm run test` | Reglas TS, redondeo, invalidación, formularios, toolbar, preview y métricas. Los comandos se simulan en estas pruebas. |
 | Flujo web | `npm run test:e2e` | UI real en Chromium/Vite, **IPC y diálogos simulados** explícitamente en `tests/e2e/browser-mocks.ts`. No acredita escritura de archivos ni escritorio nativo. |
+| Escritorio nativo (opt-in, Windows) | `npm run test:native` tras `npx tauri build --no-bundle` | EXE de producción con WebView2 e IPC Tauri reales, selector y diálogos de guardado/exportación **reales de Windows**, cierre y reapertura, recuperación del JSON y reexportación. Verifica los archivos de forma independiente. |
 | Build | `npm run build:frontend`, `npm run build` | Compilación TypeScript/Vite y producción Tauri/MSI/NSIS respectivamente. |
 
-Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDriver para una aplicación nativa. La configuración sirve Vite en HTTP. El test web incluye una referencia visual Windows deliberadamente revisada; en otros sistemas habrá que generar y revisar su snapshot de plataforma, no aceptarlo automáticamente. El backend de impresión se verifica con PNG reales en Rust, separado de los mocks web.
+### Prueba nativa del EXE
+
+`tests/native/native-check.mjs` lanza el EXE de producción sin cambios en la build. Solo para ese proceso hijo define `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` con los argumentos por defecto de wry más `--remote-debugging-port` en un puerto local aleatorio. Playwright se conecta por CDP (`connectOverCDP`) a la página `tauri.localhost`. `tests/native/uia.ps1` maneja los diálogos comunes de Windows con UI Automation, filtrando por el PID del EXE, nunca por títulos localizados. En este Windows, sus controles aparecen como `Pane`, así que se localizan por AutomationId + clase Win32 (`1148`/`1001` `Edit`, `1` `Button`) y se accionan con `WM_SETTEXT`/`BM_CLICK`. La ventana se cierra con `WindowPattern.Close` y se comprueba que el proceso termina.
+
+Escenario: PNG 2:1 con padding/agujero transparentes y SVG sintéticos generados en una carpeta temporal; importación múltiple desde el selector; plancha de 20 × 20 cm con 10 mm de separación; cantidades 3 y 2, rotación y color `#c0c0c0`; generar, guardar y exportar; cerrar; reabrir, recuperar, generar y exportar con otro nombre. Comprueba:
+
+- el JSON (hoja, cantidades, color, rotación, assets dentro de `design-assets`);
+- el arte real en la vista previa. Las imágenes del protocolo de assets *taintean* el canvas y `getImageData` falla, así que se analiza una captura CDP del canvas. La app no lee píxeles: colorea con composición del canvas;
+- los PNG con un decodificador propio, independiente del código Rust: 2362 px por lado, `pHYs` de 11811 px/m, transparencia, colores opacos exactos y que las dos exportaciones son idénticas píxel a píxel;
+- ausencia de errores de consola, de página y de red.
+
+`design-assets` no se puede redirigir, porque Tauri lo resuelve con la API del Shell, no con `APPDATA`. La prueba registra SHA-256 de los archivos previos, elimina solo las copias que añadió y falla si alguno preexistente cambia. Capturas, `resultado.json` y `registro.log` quedan en `%TEMP%\dtfetris-native-*`. Abre ventanas y diálogos en el escritorio: no usar el ratón durante la ejecución (≈1 min). No sustituye la aprobación visual ni la prueba física en el RIP.
+
+Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDriver para una aplicación nativa; la prueba nativa usa CDP sobre WebView2, no el esquema de Tauri. La configuración E2E sirve Vite en HTTP. El test web incluye una referencia visual Windows deliberadamente revisada; en otros sistemas habrá que generar y revisar su snapshot de plataforma, no aceptarlo automáticamente. El backend de impresión se verifica con PNG reales en Rust, separado de los mocks web.
 
 ## Casos críticos
 
@@ -84,4 +98,4 @@ cargo fmt --check          (en src-tauri)
 npm run build
 ```
 
-Registrar comandos/resultados reales en el roadmap y la revisión final. Un timeout o un comando no ejecutado nunca cuenta como aprobado. La impresión física y el flujo nativo con diálogos reales se validan por separado con la guía manual; no se infieren de Chromium ni de la compilación.
+Registrar comandos/resultados reales en el roadmap y la revisión final. Un timeout o un comando no ejecutado nunca cuenta como aprobado. El flujo nativo con diálogos reales se acredita con `npm run test:native` en Windows, no a partir de Chromium ni de la compilación. La impresión física se valida por separado con la guía manual.

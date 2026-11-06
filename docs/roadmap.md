@@ -71,7 +71,31 @@ Base: `origin/main` (`37ef775`), árbol limpio; rama `feat/autonomous-mvp`.
 
 ## Siguiente paso exacto
 
+Actualización de relevo (2026-11-06): el usuario pidió más espacio para tijera y se generó el mismo encargo con **10 mm en 60 × 95 cm**, sin cambiar cantidades, tamaños ni colores. No se cambió el default global de 3 mm. Después autorizó automatizar el recorrido nativo; el intento de cargar la guía de Orca quedó interrumpido y **no produjo una validación nativa nueva**. Estado, artefactos locales y pasos de continuación en [handoff-mvp.md](handoff-mvp.md).
+
 Comprobar el flujo nativo con un diseño real según [manual-dtf-check.md](./manual-dtf-check.md), especialmente selector, carga del arte local en WebView2, guardado y exportación desde los diálogos. Después validar impresión física/RIP al 100%. No hay un bloqueo conocido del motor de composición, pero no confundir pruebas de Chromium con esta comprobación.
+
+### Prueba nativa del EXE (2026-11-06): superada
+
+Se descartó Orca. `npm run test:native` (ver [testing-strategy.md](testing-strategy.md#prueba-nativa-del-exe)) maneja el EXE de producción por CDP sobre WebView2, habilitado solo en el proceso de la prueba, y los diálogos con Windows UI Automation. No cambia la build.
+
+- EXE recompilado desde `dd123c4` con `npx tauri build --no-bundle` antes de probar (el anterior era 13 min más antiguo que ese commit).
+- Observado: importación múltiple PNG+SVG desde el **selector real**; arte cargado en WebView2 (plata `#c0c0c0` y azul del SVG en la captura del canvas); 1 plancha de 20 × 20 cm con 5 copias y 10 mm; guardado y exportación desde los **diálogos reales**; cierre de la ventana y fin del proceso; reapertura, **Abrir trabajo** desde el diálogo, regeneración igual y segunda exportación.
+- Verificación independiente: JSON correcto; PNG de 2362 × 2362 px con `pHYs` de 11811 px/m, transparencia y solo dos colores opacos exactos; **las dos exportaciones son idénticas píxel a píxel**; sin errores de consola, página o red.
+- Ejecutada dos veces en verde. `design-assets`: 26 archivos previos sin cambios de SHA-256; las 2 copias de cada ejecución se eliminaron.
+- Hallazgo: las imágenes del protocolo de assets *taintean* el canvas. No afecta a la app, que colorea por composición sin leer píxeles, pero cualquier función futura que lea píxeles del preview fallaría en el EXE aunque pase en E2E.
+- Primeros intentos fallidos documentados por honestidad: filtro UIA por `ControlType` (los controles del diálogo aparecen como `Pane`), nombres de diseño sin extensión y `getImageData` sobre el canvas tainted. Todos eran del driver, no de la app.
+- Queda fuera: aprobación visual del encargo de 10 mm y prueba física en el RIP.
+
+### Incremento I acordado: recorte de logo desde PNG por MCP (pendiente, tras la prueba nativa)
+
+Decidido con el usuario el 2026-11-06. Sustituye la regla anterior de que separar diseños compuestos era solo preparación externa, **únicamente para PNG transparentes y únicamente en MCP**:
+
+- Origen: PNG de la carpeta de ingesta con fondo transparente. Fondo opaco fuera de alcance.
+- `detect_regions`: islas opacas separadas por alpha, fusionando las que estén a menos de una distancia configurable (por defecto ~2 mm a 300 DPI). Devuelve cajas en px y tamaño estimado en cm, y escribe en el workspace una miniatura NO-IMPRIMIR con las cajas numeradas.
+- `import_design_region`: importa uno o varios índices combinados, o un rectángulo en px. El recorte se guarda como nueva copia privada; el original no se modifica.
+- Escala: el recorte se importa como un PNG normal con medidas máximas en cm; no se deducen de los DPI del origen.
+- Sin selector de regiones en la UI en este incremento. Implementar con TDD y actualizar `domain-and-data-model.md`, `agent-integration.md` y `testing-strategy.md`.
 
 Prioridad inmediata: que el usuario compare y apruebe o corrija el candidato local del encargo real antes de darlo por bueno.
 
