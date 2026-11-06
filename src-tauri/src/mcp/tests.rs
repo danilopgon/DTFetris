@@ -169,7 +169,7 @@ fn initialize_negotiates_versions_and_requires_lifecycle() {
         let list = s
             .handle(json!({"jsonrpc":"2.0","id":3,"method":"tools/list"}))
             .unwrap();
-        assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 12);
+        assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 14);
         let pong = s
             .handle(json!({"jsonrpc":"2.0","id":4,"method":"ping"}))
             .unwrap();
@@ -680,4 +680,158 @@ fn failed_import_and_changed_asset_export_leave_job_and_files_intact() {
     fs::write(&s.job.designs[0].image_path, original).unwrap();
     s.call("export_png", json!({"name":"out.png","confirm":true}))
         .unwrap();
+}
+
+/// Sheet with three logos: two parts of one logo 10 px apart, and a separate red one.
+fn logo_sheet(f: &Fixture) -> Vec<u8> {
+    let mut img = image::RgbaImage::new(300, 120);
+    let mut paint = |x0: u32, y0: u32, w: u32, h: u32, c: [u8; 4]| {
+        for y in y0..y0 + h {
+            for x in x0..x0 + w {
+                img.put_pixel(x, y, image::Rgba(c));
+            }
+        }
+    };
+    paint(10, 10, 80, 40, [0, 0, 255, 255]);
+    paint(20, 60, 60, 10, [0, 0, 255, 200]);
+    paint(200, 20, 60, 30, [255, 0, 0, 255]);
+    let path = f.0.join("ingest/sheet.png");
+    img.save(&path).unwrap();
+    fs::read(path).unwrap()
+}
+
+#[test]
+fn detect_regions_numbers_logos_and_writes_a_non_printable_preview() {
+    let f = Fixture::new();
+    let original = logo_sheet(&f);
+    let mut s = f.server();
+    let before = s.snapshot();
+    let out = s
+        .call("detect_regions", json!({"path":"sheet.png"}))
+        .unwrap();
+    let regions = out["regions"].as_array().unwrap();
+    assert_eq!(regions.len(), 2, "icon and caption merge by default");
+    assert_eq!(
+        regions[0],
+        json!({"index":1,"xPx":10,"yPx":10,"widthPx":80,"heightPx":60,
+            "referenceCmAt300Dpi":{"width":0.68,"height":0.51}})
+    );
+    assert_eq!(
+        (regions[1]["xPx"].clone(), regions[1]["widthPx"].clone()),
+        (json!(200), json!(60))
+    );
+    let preview = PathBuf::from(out["previewPath"].as_str().unwrap());
+    assert!(preview.starts_with(&s.config.workspace.join("previews")));
+    assert!(preview
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .starts_with("NO-IMPRIMIR-"));
+    assert_eq!(
+        image::open(&preview).unwrap().to_rgba8().dimensions(),
+        (300, 120)
+    );
+    let split = s
+        .call("detect_regions", json!({"path":"sheet.png","mergePx":0}))
+        .unwrap();
+    assert_eq!(split["regions"].as_array().unwrap().len(), 3);
+    assert_ne!(
+        split["previewPath"], out["previewPath"],
+        "previews never overwrite"
+    );
+    assert_eq!(s.snapshot(), before, "detection does not touch the job");
+    assert_eq!(fs::read(f.0.join("ingest/sheet.png")).unwrap(), original);
+}
+
+#[test]
+fn import_design_region_crops_a_private_copy_with_explicit_physical_size() {
+    let f = Fixture::new();
+    let original = logo_sheet(&f);
+    let mut s = f.server();
+    s.call(
+        "import_design_region",
+        json!({"path":"sheet.png","regions":[2],"widthCm":6,"heightCm":6,"quantity":3,"colorOverride":"#c0c0c0"}),
+    )
+    .unwrap();
+    let d = s.job.designs.last().unwrap().clone();
+    assert_eq!(d.name, "sheet (región 2)");
+    assert_eq!((d.width_cm, d.height_cm, d.quantity), (6.0, 6.0, 3));
+    assert_eq!(d.color_override.as_deref(), Some("#c0c0c0"));
+    assert_eq!(d.original_aspect_ratio, 2.0);
+    let asset = PathBuf::from(&d.image_path);
+    assert!(asset.starts_with(s.config.asset_root.join("design-assets")));
+    let crop = image::open(&asset).unwrap().to_rgba8();
+    assert_eq!(crop.dimensions(), (60, 30));
+    assert!(crop.pixels().all(|p| p.0 == [255, 0, 0, 255]));
+
+    // Merged regions keep the caption's own alpha; rectangles copy pixels as they are.
+    s.call(
+        "import_design_region",
+        json!({"path":"sheet.png","regions":[1],"widthCm":4,"heightCm":3,"name":"Icono con texto"}),
+    )
+    .unwrap();
+    let icon = image::open(&s.job.designs.last().unwrap().image_path)
+        .unwrap()
+        .to_rgba8();
+    assert_eq!(icon.dimensions(), (80, 60));
+    assert_eq!(icon.get_pixel(15, 55).0, [0, 0, 255, 200]);
+    assert_eq!(s.job.designs.last().unwrap().name, "Icono con texto");
+    s.call(
+        "import_design_region",
+        json!({"path":"sheet.png","rectPx":{"x":190,"y":10,"width":80,"height":50},"widthCm":2,"heightCm":2}),
+    )
+    .unwrap();
+    let rect = s.job.designs.last().unwrap();
+    assert_eq!(rect.name, "sheet (recorte)");
+    assert_eq!(
+        (rect.visible_bounds.x_px, rect.visible_bounds.width_px),
+        (10.0, 60.0)
+    );
+    assert!(s.layout.is_none(), "import invalidates the layout");
+    assert_eq!(fs::read(f.0.join("ingest/sheet.png")).unwrap(), original);
+}
+
+#[test]
+fn import_design_region_rejects_invalid_requests_without_copies() {
+    let f = Fixture::new();
+    logo_sheet(&f);
+    f.svg();
+    image::RgbaImage::from_pixel(8, 8, image::Rgba([255, 255, 255, 255]))
+        .save(f.0.join("ingest/opaque.png"))
+        .unwrap();
+    let mut s = f.server();
+    let before = s.snapshot();
+    let ok = json!({"x":0,"y":0,"width":10,"height":10});
+    for args in [
+        json!({"path":"sheet.png","widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"rectPx":ok,"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","rectPx":ok,"mergePx":3,"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[3],"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[0],"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","rectPx":{"x":290,"y":0,"width":20,"height":5},"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","rectPx":{"x":120,"y":80,"width":20,"height":20},"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"widthCm":1.5,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"widthCm":1,"heightCm":1,"quantity":1001}),
+        json!({"path":"sheet.png","regions":[1],"widthCm":1,"heightCm":1,"colorOverride":"rojo"}),
+        json!({"path":"nested/art.svg","regions":[1],"widthCm":1,"heightCm":1}),
+        json!({"path":"opaque.png","regions":[1],"widthCm":1,"heightCm":1}),
+        json!({"path":"../sheet.png","regions":[1],"widthCm":1,"heightCm":1}),
+        json!({"path":"sheet.png","regions":[1],"widthCm":1,"heightCm":1,"extra":true}),
+    ] {
+        assert!(
+            s.call("import_design_region", args.clone()).is_err(),
+            "{args}"
+        );
+    }
+    assert!(s
+        .call("detect_regions", json!({"path":"opaque.png"}))
+        .unwrap_err()
+        .contains("fondo transparente"));
+    assert!(s
+        .call("detect_regions", json!({"path":"sheet.png","mergePx":1001}))
+        .is_err());
+    assert_eq!(s.snapshot(), before);
+    let assets = s.config.asset_root.join("design-assets");
+    assert!(!assets.exists() || fs::read_dir(assets).unwrap().count() == 0);
 }

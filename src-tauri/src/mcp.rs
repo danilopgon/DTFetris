@@ -3,13 +3,14 @@
 //! Roots are trusted local directories, not an OS sandbox against concurrent changes.
 use crate::commands::{
     export::export_png_into,
-    import::{import_design_into, ImportError},
+    import::{import_design_into, import_rgba_into, ImportError},
     persistence::{self, Job},
 };
 use crate::domain::{
-    assets::inspect_asset,
-    design::{fitted_visible_size_cm, parse_color_override, ImageFormat},
+    assets::{decode_png_rgba, inspect_asset, read_asset},
+    design::{fitted_visible_size_cm, parse_color_override, DesignInput, ImageFormat},
     packing::{pack, validate_gap_cm, PackingRequest, PackingResult, SheetConfig},
+    regions::{self, Rect, DEFAULT_MERGE_PX},
 };
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -147,6 +148,34 @@ struct Empty {}
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ImportArgs {
     path: String,
+    width_cm: f64,
+    height_cm: f64,
+    name: Option<String>,
+    quantity: Option<u32>,
+    can_rotate: Option<bool>,
+    color_override: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DetectArgs {
+    path: String,
+    merge_px: Option<u32>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RectArgs {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RegionImportArgs {
+    path: String,
+    regions: Option<Vec<usize>>,
+    rect_px: Option<RectArgs>,
+    merge_px: Option<u32>,
     width_cm: f64,
     height_cm: f64,
     name: Option<String>,
@@ -302,6 +331,79 @@ impl Server {
             "uiOpenInfo":"Guarda el JSON y ábrelo manualmente con Abrir trabajo en DTFetris. No hay sincronización en vivo."})
     }
 
+    fn validate_new_design(
+        &self,
+        width_cm: f64,
+        height_cm: f64,
+        name: Option<&str>,
+        quantity: Option<u32>,
+        color: Option<&str>,
+    ) -> Result<(), String> {
+        let copies: u64 = self.job.designs.iter().map(|d| u64::from(d.quantity)).sum();
+        if !integer(width_cm)
+            || !integer(height_cm)
+            || quantity == Some(0)
+            || name.is_some_and(|n| n.trim().is_empty() || n.len() > 512)
+            || copies + u64::from(quantity.unwrap_or(1)) > 1000
+        {
+            return Err(invalid(
+                "Medidas, nombre o cantidad no válidos (máximo 1000 copias).",
+            ));
+        }
+        parse_color_override(color)?;
+        Ok(())
+    }
+
+    fn assets_dir(&self) -> Result<PathBuf, String> {
+        let assets = canonical_dir(&self.config.asset_root.join("design-assets"), true)?;
+        if !assets.starts_with(&self.config.asset_root) {
+            return Err(invalid("Design-assets debe estar dentro de app_data_dir."));
+        }
+        Ok(assets)
+    }
+
+    /// Reads a PNG from the ingest root without modifying it.
+    fn ingest_png(&self, path: &str) -> Result<(image::RgbaImage, PathBuf), String> {
+        let source = relative_source(&self.config.ingest_dir, path)?;
+        if !source
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s.eq_ignore_ascii_case("png"))
+        {
+            return Err(invalid("Solo se pueden separar regiones de un PNG."));
+        }
+        Ok((decode_png_rgba(read_asset(&source)?)?, source))
+    }
+
+    /// Applies optional fields and commits; the new asset copy is removed if commit fails.
+    fn add_design(
+        &mut self,
+        mut d: DesignInput,
+        name: Option<String>,
+        quantity: Option<u32>,
+        can_rotate: Option<bool>,
+        color_override: Option<String>,
+    ) -> Result<Value, String> {
+        if let Some(name) = name {
+            d.name = name;
+        }
+        if let Some(q) = quantity {
+            d.quantity = q;
+        }
+        if let Some(r) = can_rotate {
+            d.can_rotate = r;
+        }
+        d.color_override = color_override;
+        let copied = d.image_path.clone();
+        let mut job = self.job.clone();
+        job.designs.push(d);
+        let result = self.commit(job);
+        if result.is_err() {
+            let _ = fs::remove_file(copied);
+        }
+        result
+    }
+
     fn call(&mut self, name: &str, args: Value) -> Result<Value, String> {
         match name {
             "get_job" | "inspect" => {
@@ -315,32 +417,16 @@ impl Server {
             "import_design" => {
                 let a: ImportArgs = parse(args)?;
                 // Validate editable fields before creating an asset copy.
-                if !integer(a.width_cm)
-                    || !integer(a.height_cm)
-                    || a.quantity == Some(0)
-                    || a.name
-                        .as_ref()
-                        .is_some_and(|n| n.trim().is_empty() || n.len() > 512)
-                    || self
-                        .job
-                        .designs
-                        .iter()
-                        .map(|d| u64::from(d.quantity))
-                        .sum::<u64>()
-                        + u64::from(a.quantity.unwrap_or(1))
-                        > 1000
-                {
-                    return Err(invalid(
-                        "Medidas, nombre o cantidad no válidos (máximo 1000 copias).",
-                    ));
-                }
-                parse_color_override(a.color_override.as_deref())?;
+                self.validate_new_design(
+                    a.width_cm,
+                    a.height_cm,
+                    a.name.as_deref(),
+                    a.quantity,
+                    a.color_override.as_deref(),
+                )?;
                 let source = relative_source(&self.config.ingest_dir, &a.path)?;
-                let assets = canonical_dir(&self.config.asset_root.join("design-assets"), true)?;
-                if !assets.starts_with(&self.config.asset_root) {
-                    return Err(invalid("Design-assets debe estar dentro de app_data_dir."));
-                }
-                let mut d = import_design_into(
+                self.assets_dir()?;
+                let d = import_design_into(
                     &self.config.asset_root,
                     source.to_str().ok_or("Ruta no UTF-8.")?,
                     a.width_cm,
@@ -363,24 +449,103 @@ impl Server {
                     }
                     error_text(error)
                 })?;
-                if let Some(name) = a.name {
-                    d.name = name;
+                self.add_design(d, a.name, a.quantity, a.can_rotate, a.color_override)
+            }
+            "detect_regions" => {
+                let a: DetectArgs = parse(args)?;
+                let merge_px = a.merge_px.unwrap_or(DEFAULT_MERGE_PX);
+                let (image, _) = self.ingest_png(&a.path)?;
+                let found = regions::detect(&image, merge_px)?;
+                let previews = canonical_dir(&self.config.workspace.join("previews"), true)?;
+                if !previews.starts_with(&self.config.workspace) {
+                    return Err(invalid("Previews debe estar dentro del workspace."));
                 }
-                if let Some(q) = a.quantity {
-                    d.quantity = q;
-                }
-                if let Some(r) = a.can_rotate {
-                    d.can_rotate = r;
-                }
-                d.color_override = a.color_override;
-                let copied = d.image_path.clone();
-                let mut job = self.job.clone();
-                job.designs.push(d);
-                let result = self.commit(job);
-                if result.is_err() {
-                    let _ = fs::remove_file(copied);
-                }
-                result
+                let preview_path = previews.join(format!(
+                    "NO-IMPRIMIR-regiones-{}.png",
+                    &Uuid::new_v4().simple().to_string()[..8]
+                ));
+                let mut bytes = Vec::new();
+                regions::preview(&image, &found)
+                    .write_to(&mut io::Cursor::new(&mut bytes), image::ImageFormat::Png)
+                    .map_err(error_text)?;
+                fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&preview_path)
+                    .and_then(|mut file| file.write_all(&bytes))
+                    .map_err(error_text)?;
+                let cm = |px: u32| (f64::from(px) * 2.54 / 300.0 * 100.0).round() / 100.0;
+                let list: Vec<Value> = found
+                    .regions
+                    .iter()
+                    .enumerate()
+                    .map(|(i, r)| {
+                        json!({"index":i + 1,"xPx":r.x,"yPx":r.y,"widthPx":r.width,"heightPx":r.height,
+                            "referenceCmAt300Dpi":{"width":cm(r.width),"height":cm(r.height)}})
+                    })
+                    .collect();
+                Ok(
+                    json!({"path":a.path,"widthPx":found.width,"heightPx":found.height,
+                    "mergePx":merge_px,"regions":list,"previewPath":preview_path,
+                    "notice":"Vista previa NO imprimible con regiones numeradas. Los cm a 300 DPI son solo orientativos: pide al usuario las medidas máximas en cm. Usa el mismo mergePx al importar."}),
+                )
+            }
+            "import_design_region" => {
+                let a: RegionImportArgs = parse(args)?;
+                self.validate_new_design(
+                    a.width_cm,
+                    a.height_cm,
+                    a.name.as_deref(),
+                    a.quantity,
+                    a.color_override.as_deref(),
+                )?;
+                let (image, source) = self.ingest_png(&a.path)?;
+                let (crop, label) = match (&a.regions, &a.rect_px) {
+                    (Some(selected), None) => {
+                        let found =
+                            regions::detect(&image, a.merge_px.unwrap_or(DEFAULT_MERGE_PX))?;
+                        let label = selected
+                            .iter()
+                            .map(usize::to_string)
+                            .collect::<Vec<_>>()
+                            .join("+");
+                        (found.crop(&image, selected)?, format!("región {label}"))
+                    }
+                    (None, Some(r)) if a.merge_px.is_none() => (
+                        regions::crop_rect(
+                            &image,
+                            Rect {
+                                x: r.x,
+                                y: r.y,
+                                width: r.width,
+                                height: r.height,
+                            },
+                        )?,
+                        "recorte".to_owned(),
+                    ),
+                    _ => {
+                        return Err(invalid(
+                            "Indica regions (índices de detect_regions, con su mergePx) o rectPx, no ambos.",
+                        ))
+                    }
+                };
+                let stem: String = source
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Diseño")
+                    .chars()
+                    .take(120)
+                    .collect();
+                self.assets_dir()?;
+                let d = import_rgba_into(
+                    &self.config.asset_root,
+                    &crop,
+                    &format!("{stem} ({label})"),
+                    a.width_cm,
+                    a.height_cm,
+                )
+                .map_err(error_text)?;
+                self.add_design(d, a.name, a.quantity, a.can_rotate, a.color_override)
             }
             "update_design" => {
                 let set_color = args.get("colorOverride").is_some();
@@ -757,6 +922,8 @@ fn tools() -> Vec<Value> {
         );
     }
     add("import_design", "Copia PNG/SVG relativo a ingestión. Exige medidas físicas explícitas; jamás inferirlas del archivo. Invalida layout.", json!({"path":{"type":"string","minLength":1},"widthCm":cm,"heightCm":cm,"name":name,"quantity":quantity,"canRotate":{"type":"boolean"},"colorOverride":color}), json!(["path","widthCm","heightCm"]), false, false);
+    add("detect_regions", "Detecta logos separados por transparencia en un PNG de ingestión, agrupando partes a menos de mergePx (por defecto 24 px, unos 2 mm a 300 DPI). Devuelve regiones numeradas y escribe en workspace/previews una vista NO imprimible con las cajas. No modifica el original.", json!({"path":{"type":"string","minLength":1},"mergePx":{"type":"integer","minimum":0,"maximum":1000}}), json!(["path"]), false, false);
+    add("import_design_region", "Recorta del PNG de ingestión las regiones indicadas (índices de detect_regions con el mismo mergePx) o un rectángulo rectPx, y lo importa como copia privada nueva. Exige medidas máximas explícitas en cm; jamás inferirlas de píxeles. El original no se modifica. Invalida layout.", json!({"path":{"type":"string","minLength":1},"regions":{"type":"array","items":{"type":"integer","minimum":1},"minItems":1,"maxItems":4096},"rectPx":{"type":"object","properties":{"x":{"type":"integer","minimum":0},"y":{"type":"integer","minimum":0},"width":{"type":"integer","minimum":1},"height":{"type":"integer","minimum":1}},"required":["x","y","width","height"],"additionalProperties":false},"mergePx":{"type":"integer","minimum":0,"maximum":1000},"widthCm":cm,"heightCm":cm,"name":name,"quantity":quantity,"canRotate":{"type":"boolean"},"colorOverride":color}), json!(["path","widthCm","heightCm"]), false, false);
     add(
         "update_design",
         "Edita un diseño por ID atómicamente e invalida layout. Medidas explícitas en cm.",

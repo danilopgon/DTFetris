@@ -78,6 +78,17 @@ Ejemplo crítico:
 
 Los límites visibles se detectan al importar y se persisten como metadatos. Preview, exportación y packing derivan el tamaño ajustado proporcional usando esos metadatos y los máximos solicitados. El packing no lee píxeles ni archivos.
 
+## Regiones de un PNG con varios logos
+
+Solo por MCP (`detect_regions`, `import_design_region`) y solo para PNG con fondo transparente. No hay separador en la UI ni para SVG.
+
+- Una región parte de islas de píxeles visibles con el mismo umbral (alpha `>= 3/255`) y conectividad de 8 vecinos.
+- Las islas cuya caja queda a menos de `mergePx` de otra se agrupan, por defecto 24 px (≈ 2 mm a 300 DPI); también las solapadas o contenidas, como un halo dentro del agujero de un logo. La agrupación se repite hasta estabilizarse. Las regiones se numeran desde 1 en orden de lectura.
+- Si las cuatro esquinas son visibles, el PNG se considera de fondo opaco y se rechaza. Más de 4096 islas también se rechaza: no es un conjunto de logos.
+- El recorte es la caja conjunta de las regiones elegidas. Los píxeles de otras regiones que caigan dentro pasan a transparentes; los débiles bajo el umbral se conservan para no cortar el antialiasing. Un `rectPx` copia el rectángulo tal cual.
+- El recorte se guarda como PNG nuevo en `design-assets` y sus límites visibles se recalculan desde ese archivo. El original no se modifica.
+- La escala no sale de los píxeles ni de los DPI del origen: las medidas máximas en cm se piden explícitamente, como en cualquier importación. Los cm a 300 DPI devueltos son solo orientativos.
+
 ## Modelo TypeScript
 
 ```typescript

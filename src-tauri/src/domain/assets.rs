@@ -7,6 +7,8 @@ use std::path::Path;
 pub const MAX_ASSET_BYTES: u64 = 20 * 1024 * 1024;
 pub const MAX_RASTER_PIXELS: u64 = 32_000_000;
 pub const MAX_RASTER_SIDE: u32 = 16_384;
+/// Alpha at or above this value counts as visible artwork (bounds, regions).
+pub const VISIBLE_ALPHA: u8 = 3;
 pub const EMPTY_ARTWORK_ERROR: &str = "El diseño no contiene arte visible.";
 // Extra SVG layers have a separate aggregate budget (512 MB RGBA), including
 // conservative filter scratch space. Export owns its destination canvas budget.
@@ -46,10 +48,29 @@ pub fn check_raster_size(width: u32, height: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// Decodes a PNG under the shared raster limits. Callers read bytes with `read_asset`.
+pub fn decode_png_rgba(bytes: Vec<u8>) -> Result<image::RgbaImage, String> {
+    let mut reader = image::ImageReader::with_format(Cursor::new(bytes), image::ImageFormat::Png);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_RASTER_SIDE);
+    limits.max_image_height = Some(MAX_RASTER_SIDE);
+    limits.max_alloc = Some(MAX_RASTER_PIXELS * 8);
+    reader.limits(limits);
+    let decoder = reader
+        .into_decoder()
+        .map_err(|_| "El PNG está dañado o es demasiado grande.".to_string())?;
+    use image::ImageDecoder;
+    let (width, height) = decoder.dimensions();
+    check_raster_size(width, height)?;
+    Ok(image::DynamicImage::from_decoder(decoder)
+        .map_err(|_| "No se pudo decodificar el PNG.".to_string())?
+        .into_rgba8())
+}
+
 fn scan_bounds(data: &[u8], width: u32, height: u32) -> Result<VisibleBounds, String> {
     let (mut left, mut top, mut right, mut bottom) = (width, height, 0, 0);
     for (index, pixel) in data.chunks_exact(4).enumerate() {
-        if pixel[3] >= 3 {
+        if pixel[3] >= VISIBLE_ALPHA {
             let x = index as u32 % width;
             let y = index as u32 / width;
             left = left.min(x);
@@ -323,23 +344,8 @@ pub fn inspect_asset(path: &Path, format: &ImageFormat) -> Result<VisibleBounds,
     let bytes = read_asset(path)?;
     match format {
         ImageFormat::Png => {
-            let mut reader =
-                image::ImageReader::with_format(Cursor::new(bytes), image::ImageFormat::Png);
-            let mut limits = image::Limits::default();
-            limits.max_image_width = Some(MAX_RASTER_SIDE);
-            limits.max_image_height = Some(MAX_RASTER_SIDE);
-            limits.max_alloc = Some(MAX_RASTER_PIXELS * 8);
-            reader.limits(limits);
-            let decoder = reader
-                .into_decoder()
-                .map_err(|_| "El PNG está dañado o es demasiado grande.".to_string())?;
-            use image::ImageDecoder;
-            let (width, height) = decoder.dimensions();
-            check_raster_size(width, height)?;
-            let image = image::DynamicImage::from_decoder(decoder)
-                .map_err(|_| "No se pudo decodificar el PNG.".to_string())?
-                .into_rgba8();
-            scan_bounds(image.as_raw(), width, height)
+            let image = decode_png_rgba(bytes)?;
+            scan_bounds(image.as_raw(), image.width(), image.height())
         }
         ImageFormat::Svg => {
             let tree = parse_svg(&bytes)?;

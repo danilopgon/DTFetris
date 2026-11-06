@@ -167,6 +167,71 @@ pub fn import_design_into(
     })
 }
 
+/// Stores an in-memory PNG (e.g. a logo cropped from a larger PNG) as a new private
+/// asset and builds its design. Metadata is rescanned from the written file.
+pub fn import_rgba_into(
+    dest_dir: &Path,
+    image: &image::RgbaImage,
+    name: &str,
+    width_cm: f64,
+    height_cm: f64,
+) -> Result<DesignInput, ImportError> {
+    validate_dimensions(width_cm, height_cm)?;
+    let mut bytes = Vec::new();
+    image
+        .write_to(
+            &mut std::io::Cursor::new(&mut bytes),
+            image::ImageFormat::Png,
+        )
+        .map_err(|_| ImportError::MetadataFailed)?;
+    if bytes.len() as u64 > MAX_ASSET_BYTES {
+        return Err(ImportError::MetadataFailed);
+    }
+    let assets_dir = dest_dir.join("design-assets");
+    std::fs::create_dir_all(&assets_dir).map_err(|_| ImportError::CopyFailed)?;
+    let dest_path = assets_dir.join(format!("{}.png", Uuid::new_v4()));
+    let written = (|| {
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&dest_path)
+            .map_err(|_| ImportError::CopyFailed)?;
+        file.write_all(&bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| ImportError::CopyFailed)
+    })();
+    let visible_bounds = written.and_then(|_| {
+        inspect_asset(&dest_path, &ImageFormat::Png).map_err(|message| {
+            if message == EMPTY_ARTWORK_ERROR {
+                ImportError::EmptyArtwork
+            } else {
+                ImportError::MetadataFailed
+            }
+        })
+    });
+    let visible_bounds = match visible_bounds {
+        Ok(bounds) => bounds,
+        Err(error) => {
+            let _ = std::fs::remove_file(&dest_path);
+            return Err(error);
+        }
+    };
+    Ok(DesignInput {
+        id: Uuid::new_v4().to_string(),
+        name: name.to_owned(),
+        image_path: dest_path.to_string_lossy().into_owned(),
+        width_cm,
+        height_cm,
+        format: ImageFormat::Png,
+        original_aspect_ratio: visible_bounds.width_px / visible_bounds.height_px,
+        visible_bounds,
+        quantity: 1,
+        can_rotate: true,
+        color_override: None,
+    })
+}
+
 // ─── Tauri command (thin wrapper that resolves app_data_dir) ─────────────────
 
 #[tauri::command(async)]
@@ -192,6 +257,43 @@ mod tests {
     use super::*;
     use image::{ImageBuffer, RgbaImage};
     use std::io::Write;
+
+    #[test]
+    fn rgba_import_writes_a_private_png_and_rescans_bounds() {
+        let dir = temp_dir();
+        let mut img = RgbaImage::new(20, 10);
+        for x in 2..18 {
+            for y in 3..7 {
+                img.put_pixel(x, y, image::Rgba([1, 2, 3, 255]));
+            }
+        }
+        let d = import_rgba_into(&dir, &img, "recorte", 8.0, 4.0).unwrap();
+        assert_eq!(d.name, "recorte");
+        assert_eq!(
+            (d.visible_bounds.x_px, d.visible_bounds.width_px),
+            (2.0, 16.0)
+        );
+        assert_eq!(d.original_aspect_ratio, 4.0);
+        let path = Path::new(&d.image_path);
+        assert!(path.starts_with(dir.join("design-assets")));
+        assert_eq!(image::open(path).unwrap().to_rgba8(), img);
+        assert_eq!(
+            import_rgba_into(&dir, &RgbaImage::new(4, 4), "vacío", 1.0, 1.0).unwrap_err(),
+            ImportError::EmptyArtwork
+        );
+        assert_eq!(
+            import_rgba_into(&dir, &img, "x", 0.0, 1.0).unwrap_err(),
+            ImportError::InvalidDimensions
+        );
+        // Only the successful import remains.
+        assert_eq!(
+            std::fs::read_dir(dir.join("design-assets"))
+                .unwrap()
+                .count(),
+            1
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn shared_svg_policy_maps_unsupported_content_to_stable_metadata_error() {

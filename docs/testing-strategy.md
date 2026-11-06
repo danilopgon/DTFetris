@@ -80,6 +80,7 @@ Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDr
 - Ingesta determinista, rutas canónicas restringidas, rechazo de escapes y nombres de destino fuera del workspace.
 - Mutaciones/errores atómicos, layout invalidado, exportación con confirmación explícita y no sobreescritura de PNG.
 - Flujo de trabajo real desde herramientas: importar → editar color/cantidad → packing → guardar/recuperar → exportar con fixtures privados. No configura ni llama a un LLM externo para los tests.
+- Regiones de PNG (`domain::regions` y MCP): orden de lectura, agrupación por distancia configurable, halo contenido en un agujero, recorte con píxeles y alpha exactos y enmascarado de regiones intermedias, rechazo de fondo opaco/índices/rectángulos fuera de rango, vista NO-IMPRIMIR sin sobrescritura, original intacto y ningún asset creado ante errores.
 - SVG 1.1 con `DOCTYPE` externo inerte aceptado sin fetch; rechazo de subconjuntos internos/entidades/DOCTYPE duplicado y errores de importación con detalle útil en MCP.
 
 ## Validación de negocio local

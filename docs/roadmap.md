@@ -77,7 +77,7 @@ El flujo nativo ya está verificado (apartado siguiente). Siguientes pasos, por 
 
 1. Aprobación visual del usuario del encargo de 10 mm (60 × 95 cm).
 2. Prueba pequeña en RIP/impresora al 100% según [manual-dtf-check.md](./manual-dtf-check.md): tamaño medido, transparencia, color, espejo una sola vez y recorte. Revisar también si el RIP genera base blanca en el halo de alpha muy bajo (≤15/255) que deja el remuestreo junto a los bordes interiores.
-3. Incremento I: recorte de logo desde PNG por MCP.
+3. Usar el incremento I (recorte por MCP) en el encargo del fin de semana y registrar lo observado.
 
 ### Prueba nativa del EXE (2026-11-06): superada
 
@@ -93,7 +93,7 @@ Se descartó Orca. `npm run test:native` (ver [testing-strategy.md](testing-stra
 - Primeros intentos fallidos documentados por honestidad: filtro UIA por `ControlType` (los controles del diálogo aparecen como `Pane`), nombres de diseño sin extensión y `getImageData` sobre el canvas tainted. Todos eran del driver, no de la app.
 - Queda fuera: aprobación visual del encargo de 10 mm y prueba física en el RIP.
 
-### Incremento I acordado: recorte de logo desde PNG por MCP (pendiente)
+### Incremento I: recorte de logo desde PNG por MCP (implementado 2026-11-06; pendiente de uso real)
 
 Decidido con el usuario el 2026-11-06. Sustituye la regla anterior de que separar diseños compuestos era solo preparación externa, **únicamente para PNG transparentes y únicamente en MCP**:
 
@@ -102,6 +102,13 @@ Decidido con el usuario el 2026-11-06. Sustituye la regla anterior de que separa
 - `import_design_region`: importa uno o varios índices combinados, o un rectángulo en px. El recorte se guarda como nueva copia privada; el original no se modifica.
 - Escala: el recorte se importa como un PNG normal con medidas máximas en cm; no se deducen de los DPI del origen.
 - Sin selector de regiones en la UI en este incremento. Implementar con TDD y actualizar `domain-and-data-model.md`, `agent-integration.md` y `testing-strategy.md`.
+
+Evidencia:
+
+- `domain::regions` (detección, agrupación, recorte, vista numerada con dígitos de mapa de bits, sin dependencias nuevas), `import_rgba_into` y herramientas MCP `detect_regions`/`import_design_region`. Validación de medidas y alta de diseños compartidas con `import_design`; umbral de visibilidad compartido (`VISIBLE_ALPHA`) y decodificación PNG con los mismos límites (`decode_png_rgba`).
+- `cargo test`: **106 tests** (11 nuevos: 7 de regiones, 1 de importación en memoria, 3 de MCP). `cargo fmt` aplicado; clippy sin avisos nuevos salvo uno de estilo por indexado intencionado.
+- `npm run build:mcp` y `npm run test:mcp`: stdio real con **14 herramientas**.
+- Pendiente: probarlo con el encargo real de este fin de semana. No se ha usado aún con un PNG de cliente ni desde el cliente MCP habitual.
 
 Prioridad inmediata: que el usuario compare y apruebe o corrija el encargo de 10 mm antes de darlo por bueno.
 

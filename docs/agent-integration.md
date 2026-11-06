@@ -47,6 +47,8 @@ El agente debe usar las herramientas descubiertas en `tools/list`, no inventar c
 | `list_ingest` | `{}`; devuelve rutas relativas con `/` y avisa si el listado se trunca. |
 | `get_job`, `inspect` | `{}`; trabajo, layout pendiente, raíces y ruta JSON guardada/recomendada. |
 | `import_design` | `path`, `widthCm`, `heightCm`; opcionales `name`, `quantity`, `canRotate`, `colorOverride`. |
+| `detect_regions` | `path` de un PNG de ingestión; `mergePx` opcional (0–1000, por defecto 24 ≈ 2 mm a 300 DPI). Devuelve regiones numeradas en lectura (arriba-abajo, izquierda-derecha) con caja en px y cm orientativos a 300 DPI, y `previewPath`: un PNG `NO-IMPRIMIR-regiones-*.png` en `workspace/previews` con las cajas numeradas. No cambia el trabajo. |
+| `import_design_region` | `path`, `widthCm`, `heightCm` y **o bien** `regions` (índices de `detect_regions`, con el mismo `mergePx`) **o bien** `rectPx` `{x, y, width, height}`; opcionales `name`, `quantity`, `canRotate`, `colorOverride`. Guarda el recorte como copia privada nueva. |
 | `update_design` | `id` y campos editables opcionales. Omitir color lo conserva; `colorOverride: null` restaura originales. |
 | `duplicate_design` | `id`; comparte asset, conserva color y recibe ID nuevo. |
 | `remove_design` | `id`, `confirm: true`; no borra el asset. |
@@ -69,7 +71,8 @@ Las respuestas de estado contienen `job`, `layout`, `layoutPending`, `jobPath` y
 - Borrado de un diseño y exportación requieren confirmación explícita en la herramienta. Sobrescribir JSON debe indicarse expresamente; PNG existentes nunca se sobrescriben. La configuración de permisos del cliente MCP sigue siendo responsable de pedir aprobación humana cuando corresponda: un parámetro `confirm` no sustituye ese control.
 - Se reutilizan el MaxRects, la persistencia y la composición PNG de Rust. No hay un segundo motor de packing ni exportación en JavaScript.
 - Las medidas de diseño son máximos: se ajusta el arte proporcionalmente y se reserva su bbox visible. Los trabajos nuevos usan `gapCm: 0.3` (3 mm); JSON antiguos sin campo usan 0. La separación no impone margen exterior.
-- Se admite un `DOCTYPE` externo SVG 1.1 inerte sin cargar recursos de red/disco. Se rechazan subconjuntos DTD internos y declaraciones de entidades. Un SVG compuesto debe prepararse externamente como diseños independientes; DTFetris no incorpora un editor/separador.
+- Se admite un `DOCTYPE` externo SVG 1.1 inerte sin cargar recursos de red/disco. Se rechazan subconjuntos DTD internos y declaraciones de entidades. Un SVG compuesto debe prepararse externamente como diseños independientes; DTFetris no incorpora un editor/separador de SVG.
+- **Separar logos de un PNG** con varios diseños sobre fondo transparente: `detect_regions` y después `import_design_region`. Revisar la vista NO-IMPRIMIR (el agente o el usuario) antes de importar. Las partes a menos de `mergePx` se agrupan (texto bajo un icono); con `mergePx: 0` cada isla va aparte y se pueden combinar índices. Si la detección no aísla un logo, usar `rectPx`. Los PNG con fondo opaco se rechazan. Los cm devueltos son orientativos: las medidas máximas se piden siempre al usuario.
 - Ingesta, workspace y almacenamiento de assets deben ser raíces separadas, sin solapamiento. El listado se limita a profundidad 8, 1000 archivos y 10000 entradas de directorio. Frames entrantes: hasta 1 MiB; trabajos JSON: hasta 8 MiB; hasta 1000 copias.
 - Es un control de rutas para directorios locales de confianza, **no un sandbox de sistema operativo** contra otro proceso que cambie directorios/enlaces al mismo tiempo. No usar raíces controladas por terceros ni editar simultáneamente el mismo workspace.
 
@@ -77,6 +80,12 @@ Las respuestas de estado contienen `job`, `layout`, `layoutPending`, `jobPath` y
 
 El adaptador implementa el subconjunto de MCP necesario para inicialización, ping, listado e invocación de herramientas sobre transporte newline-delimited JSON-RPC/stdio. No implementa HTTP, autenticación remota, recursos/prompt subscriptions ni tareas asíncronas MCP. El trabajo se ejecuta secuencialmente y el cierre de stdin termina la sesión.
 
-Prueba reproducible del ejecutable, sin llamar a ningún modelo ni importar assets en tus datos: `npm run build:mcp` y `npm run test:mcp`. Crea raíces temporales y comprueba inicialización, descubrimiento de las 12 herramientas, estado, listado vacío y ping; solo elimina su propio directorio temporal. Los flujos con PNG/SVG reales y los controles de rutas se prueban adicionalmente en `cargo test`, con assets privados de fixture.
+Prueba reproducible del ejecutable, sin llamar a ningún modelo ni importar assets en tus datos: `npm run build:mcp` y `npm run test:mcp`. Crea raíces temporales y comprueba inicialización, descubrimiento de las 14 herramientas, estado, listado vacío y ping; solo elimina su propio directorio temporal. Los flujos con PNG/SVG reales y los controles de rutas se prueban adicionalmente en `cargo test`, con assets privados de fixture.
 
 Referencias: [transporte MCP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) y [herramientas MCP](https://modelcontextprotocol.io/specification/2025-11-25/server/tools). La interpretación del lenguaje natural sigue perteneciendo a tu agente externo.
+
+## Ejemplo: recortar un logo de un PNG
+
+> En `pedido/varios-logos.png` hay varios logos. Detecta las regiones y enséñame la vista previa. Después importa la región del escudo con medidas máximas de 8 × 8 cm, 12 copias y color `#C0C0C0`.
+
+El agente llama a `detect_regions`, abre `previewPath` para identificar el número del escudo (o te lo pregunta) y llama a `import_design_region` con ese índice y el mismo `mergePx`. Si el escudo y su texto salen separados, puede repetir la detección con un `mergePx` mayor o combinar índices (`"regions": [2, 3]`).
