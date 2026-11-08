@@ -51,6 +51,15 @@
     border-left: var(--rule-hair) solid var(--color-rule);
   }
 
+  /* safe centring: centred while the sheet fits, start-aligned when it overflows, so the
+     left edge of a wide sheet is never placed before the scroll origin. */
+  .stage-sheets {
+    justify-content: safe center;
+  }
+  .stage-empty {
+    align-items: safe center;
+  }
+
   .btn {
     display: inline-flex;
     align-items: center;

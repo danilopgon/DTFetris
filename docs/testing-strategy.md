@@ -73,6 +73,10 @@ Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDr
 - La vista previa (`getPreviewCrop`) pasa de bounds a unidades del original con un factor uniforme y de ahí a la miniatura por eje. Regresión: un logo en una miniatura coloreada redondeada por eje (1000 × 101 → 512 × 52) no se desplaza.
 - Packing: el ruido de coma flotante en un límite exacto (15,000000000000002 cm) no añade una unidad y no rechaza un diseño que cabe justo.
 
+### Vista previa en ventana estrecha
+
+- `tests/e2e/narrow-stage.spec.ts`: a 1000 px de ventana, una plancha más ancha que el escenario empieza dentro de él y se puede recorrer entera con el scroll (centrado seguro, `justify-content: safe center`).
+
 ### Color único
 
 - Validación estricta `#RRGGBB` en TS/Rust; ausente/null mantiene originales. Se rechazan abreviaturas, nombres y hex con alpha.

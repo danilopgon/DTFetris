@@ -98,7 +98,7 @@ export default function SheetPreview() {
         </p>
       )}
       {sheets.length === 0 ? (
-        <div className="flex flex-col items-center">
+        <div className="stage-empty flex flex-col">
           <p className="help mb-3">
             {stale
               ? 'Composición pendiente. Pulsa Generar planchas.'
@@ -115,7 +115,7 @@ export default function SheetPreview() {
           />
         </div>
       ) : (
-        <div className="flex flex-wrap items-start justify-center gap-10">
+        <div className="stage-sheets flex flex-wrap items-start gap-10">
           {sheets.map((sheet, index) => {
             const scale = sheetPreviewScale(sheet.widthCm, sheet.heightCm)
             return (
