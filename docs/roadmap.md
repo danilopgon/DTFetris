@@ -117,6 +117,16 @@ Evidencia:
   - en la vista NO-IMPRIMIR los números tapan las regiones pequeñas.
 - El flujo de encargo (interpretar pedido, recortar, tamaños con desviación, plancha completa, margen máximo, verificación y archivo) quedó como skill de usuario fuera del repo, con rutas privadas. El servidor está registrado en Claude Code con ingesta en el archivo de planchas del taller.
 
+### Rediseño de la interfaz con Hallmark (2026-11-08, rama `feat/redesign-hallmark`)
+
+Pasada `/hallmark redesign src` (profundidad completa, pantalla de aplicación) para quitar el aspecto de plantilla generada sin tocar lógica.
+
+- Sistema: tokens OKLCH en `src/tokens.css` con la marca del icono (marino de fondo, ocre como único acento, marrón para avisos) e IBM Plex Sans incluida localmente (la CSP de Tauri bloquea fuentes remotas). Tailwind usa esos tokens; ya no hay paleta por defecto.
+- Composición: barra superior (logo, trabajo y acciones), panel de diseños a la izquierda, cabecera de plancha, plancha centrada a tamaño completo de su caja (`sheetPreviewScale`, sin el tope de 6 px/cm) y carril de aprovechamiento a la derecha. Un solo control relleno que avanza: importar, generar, exportar.
+- Conservado: todos los handlers, labels, `aria-label`, ids y `data-testid` (sloplint `--kept`: 5/5 campos, 29/29 handlers, 3/3 hooks). Cambiaron solo las cadenas unidas con «·» (métricas por plancha, leyenda de plancha, fila de diseño), que pasan a columnas.
+- Evidencia: sloplint de 11 FAIL y 1 REFLEX a 0/0; revisión final en contexto limpio con veredicto «fix», 3 hallazgos resueltos y 3 descartados con motivo. 149 tests frontend (los de geometría ahora relativos a la escala), 5 E2E con la referencia visual revisada y actualizada, lint, tsc y prueba nativa del EXE en verde.
+- Pendiente: el tablero gris de transparencia (`#d1d5db`, fijado por un test E2E) da poco contraste a diseños blancos o plata en la vista previa; valorar un tablero más oscuro o a cuadros.
+
 Prioridad inmediata: que el usuario compare y apruebe o corrija el encargo de 10 mm antes de darlo por bueno.
 
 Continuación breve: «Lee AGENTS.md y docs/roadmap.md. Conserva la evidencia del MVP base y verifica los incrementos G/H (color y MCP/ingesta). No reintroduzcas un proceso pesado. Para pruebas nativas usa solo fixtures propios y herramientas autorizadas, sin tocar trabajos reales».

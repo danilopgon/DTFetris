@@ -172,13 +172,10 @@ export default function DesignList() {
 
   return (
     <div>
-      <h2 className="mb-4 text-lg font-semibold">Diseños</h2>
+      <h2 className="title mb-4">Diseños</h2>
 
       {isLayoutStale && (
-        <p
-          role="status"
-          className="mb-3 rounded border border-amber-500/60 bg-amber-950/40 px-3 py-2 text-sm text-amber-100"
-        >
+        <p role="status" className="notice mb-3">
           El diseño cambió. Recalcula la plancha para actualizar el resultado.
         </p>
       )}
@@ -189,7 +186,7 @@ export default function DesignList() {
           disabled={isImporting}
           onClick={handleSelectFile}
           aria-label="Seleccionar archivo PNG o SVG"
-          className="w-full rounded border border-dashed border-gray-500 px-3 py-2 text-left text-sm text-gray-300 hover:border-blue-400 hover:text-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn btn-drop"
         >
           {selectedName ? (
             <span className="block truncate">{selectedName}</span>
@@ -199,7 +196,7 @@ export default function DesignList() {
         </button>
 
         <div>
-          <label htmlFor="design-width-cm" className="mb-1 block text-sm">
+          <label htmlFor="design-width-cm" className="label">
             Ancho máximo (cm)
           </label>
           <input
@@ -211,11 +208,11 @@ export default function DesignList() {
             onChange={(e) => setWidthCm(e.target.value)}
             placeholder="ej. 10"
             aria-label="Ancho máximo en centímetros"
-            className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm"
+            className="field"
           />
         </div>
         <div>
-          <label htmlFor="design-height-cm" className="mb-1 block text-sm">
+          <label htmlFor="design-height-cm" className="label">
             Alto máximo (cm)
           </label>
           <input
@@ -227,7 +224,7 @@ export default function DesignList() {
             onChange={(e) => setHeightCm(e.target.value)}
             placeholder="ej. 8"
             aria-label="Alto máximo en centímetros"
-            className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm"
+            className="field"
           />
         </div>
 
@@ -236,47 +233,47 @@ export default function DesignList() {
           disabled={!canImport}
           onClick={handleImport}
           aria-label="Importar diseño"
-          className="w-full rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className={designs.length === 0 ? 'btn btn-primary w-full' : 'btn w-full'}
         >
           Importar diseño
         </button>
-        <p className="text-xs text-gray-400">
+        <p className="help">
           Puedes seleccionar varios archivos. Las medidas máximas se aplican a todos; después puedes
           editar cada diseño.
         </p>
-        <p className="text-xs text-gray-400">
+        <p className="help">
           Máximo 20 MiB y 32 millones de píxeles por diseño. En SVG, convierte texto a trazados; no
           se admiten imágenes enlazadas, scripts ni patrones.
         </p>
 
         {errorMessage && (
-          <p role="alert" className="text-sm text-red-400">
+          <p role="alert" className="msg-error">
             {errorMessage}
           </p>
         )}
       </div>
 
       {designs.length === 0 ? (
-        <p className="text-sm text-gray-400">Aún no hay diseños.</p>
+        <p className="help">Aún no hay diseños.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="divide-y divide-rule border-y border-rule">
           {designs.map((d) => (
-            <li key={d.id} className="rounded bg-gray-800 p-2 text-sm">
+            <li key={d.id} className="py-3 text-sm">
               {editingId === d.id && editForm ? (
                 <div className="space-y-2">
                   <div>
-                    <label htmlFor={`design-name-${d.id}`} className="mb-1 block text-sm">
+                    <label htmlFor={`design-name-${d.id}`} className="label">
                       Nombre
                     </label>
                     <input
                       id={`design-name-${d.id}`}
                       value={editForm.name}
                       onChange={(e) => updateEditForm({ name: e.target.value })}
-                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                      className="field"
                     />
                   </div>
                   <div>
-                    <label htmlFor={`design-edit-width-${d.id}`} className="mb-1 block text-sm">
+                    <label htmlFor={`design-edit-width-${d.id}`} className="label">
                       Ancho máximo (cm)
                     </label>
                     <input
@@ -286,11 +283,11 @@ export default function DesignList() {
                       step={1}
                       value={editForm.widthCm}
                       onChange={(e) => updateEditForm({ widthCm: e.target.value })}
-                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                      className="field"
                     />
                   </div>
                   <div>
-                    <label htmlFor={`design-edit-height-${d.id}`} className="mb-1 block text-sm">
+                    <label htmlFor={`design-edit-height-${d.id}`} className="label">
                       Alto máximo (cm)
                     </label>
                     <input
@@ -300,11 +297,11 @@ export default function DesignList() {
                       step={1}
                       value={editForm.heightCm}
                       onChange={(e) => updateEditForm({ heightCm: e.target.value })}
-                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                      className="field"
                     />
                   </div>
                   <div>
-                    <label htmlFor={`design-edit-quantity-${d.id}`} className="mb-1 block text-sm">
+                    <label htmlFor={`design-edit-quantity-${d.id}`} className="label">
                       Cantidad
                     </label>
                     <input
@@ -314,11 +311,11 @@ export default function DesignList() {
                       step={1}
                       value={editForm.quantity}
                       onChange={(e) => updateEditForm({ quantity: e.target.value })}
-                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                      className="field"
                     />
                   </div>
                   <div>
-                    <label htmlFor={`design-edit-color-${d.id}`} className="mb-1 block text-sm">
+                    <label htmlFor={`design-edit-color-${d.id}`} className="label">
                       Color único (opcional)
                     </label>
                     <input
@@ -331,9 +328,9 @@ export default function DesignList() {
                       aria-invalid={
                         editError !== null && !isValidColorOverride(editForm.colorOverride || null)
                       }
-                      className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                      className="field"
                     />
-                    <p id={`design-color-help-${d.id}`} className="mt-1 text-xs text-gray-400">
+                    <p id={`design-color-help-${d.id}`} className="help mt-1">
                       Formato #RRGGBB. Sustituye todos los colores y conserva la transparencia; no
                       modifica el archivo original.
                     </p>
@@ -343,25 +340,26 @@ export default function DesignList() {
                         updateEditForm({ colorOverride: '' })
                         setEditError(null)
                       }}
-                      className="mt-1 rounded border border-gray-500 px-2 py-1"
+                      className="btn btn-small mt-2"
                     >
                       Usar colores originales
                     </button>
                   </div>
                   <label className="flex items-center gap-2 text-sm">
                     <input
+                      className="check"
                       type="checkbox"
                       checked={editForm.canRotate}
                       onChange={(e) => updateEditForm({ canRotate: e.target.checked })}
                     />
                     Permitir rotación
                   </label>
-                  <p className="text-xs text-gray-400">
+                  <p className="help">
                     Las medidas máximas limitan el tamaño del arte, que se ajusta proporcionalmente
                     sin deformarse. Solo su rectángulo visible ocupa espacio en la plancha.
                   </p>
                   {editError && (
-                    <p role="alert" className="text-sm text-red-400">
+                    <p role="alert" className="msg-error">
                       {editError}
                     </p>
                   )}
@@ -370,7 +368,7 @@ export default function DesignList() {
                       type="button"
                       onClick={() => saveEdit(d.id)}
                       aria-label="Guardar cambios"
-                      className="rounded bg-blue-600 px-2 py-1 text-white"
+                      className="btn btn-small"
                     >
                       Guardar
                     </button>
@@ -378,7 +376,7 @@ export default function DesignList() {
                       type="button"
                       onClick={cancelEdit}
                       aria-label="Cancelar edición"
-                      className="rounded border border-gray-500 px-2 py-1"
+                      className="btn btn-small"
                     >
                       Cancelar
                     </button>
@@ -386,29 +384,45 @@ export default function DesignList() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div>
-                    {d.name} (máximo {d.widthCm} × {d.heightCm} cm) ×{d.quantity}
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 break-words font-semibold">{d.name}</span>
+                    <span className="shrink-0 tabular-nums text-ink-2">×{d.quantity}</span>
                   </div>
-                  <p className="text-xs text-gray-300">
-                    Arte visible:{' '}
-                    {getFittedVisibleSizeCm(d, d.originalAspectRatio).widthCm.toFixed(2)} ×{' '}
-                    {getFittedVisibleSizeCm(d, d.originalAspectRatio).heightCm.toFixed(2)} cm ·{' '}
-                    {d.canRotate ? 'rotación permitida' : 'sin rotación'}
-                  </p>
-                  {d.colorOverride && (
-                    <p className="text-xs text-gray-300">
-                      Color único: {d.colorOverride.toUpperCase()}
-                    </p>
-                  )}
+                  <dl className="help tabular-nums">
+                    <div>
+                      <dt className="inline">Máximo </dt>
+                      <dd className="inline">
+                        {d.widthCm} × {d.heightCm} cm
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="inline">Arte visible: </dt>
+                      <dd className="inline">
+                        {getFittedVisibleSizeCm(d, d.originalAspectRatio).widthCm.toFixed(2)} ×{' '}
+                        {getFittedVisibleSizeCm(d, d.originalAspectRatio).heightCm.toFixed(2)} cm
+                      </dd>
+                    </div>
+                    <div>{d.canRotate ? 'Rotación permitida' : 'Sin rotación'}</div>
+                    {d.colorOverride && (
+                      <div className="flex items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="inline-block h-3 w-3 rounded-sm border border-muted"
+                          style={{ background: d.colorOverride }}
+                        />
+                        Color único: {d.colorOverride.toUpperCase()}
+                      </div>
+                    )}
+                  </dl>
                   {pendingDeleteId === d.id ? (
-                    <div className="space-y-2 rounded border border-red-500/50 p-2">
+                    <div className="space-y-2 border-l-2 border-error pl-3">
                       <p>¿Eliminar este diseño?</p>
                       <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => confirmDelete(d.id)}
                           aria-label="Confirmar eliminación"
-                          className="rounded bg-red-600 px-2 py-1 text-white"
+                          className="btn btn-small btn-danger"
                         >
                           Eliminar
                         </button>
@@ -416,7 +430,7 @@ export default function DesignList() {
                           type="button"
                           onClick={() => setPendingDeleteId(null)}
                           aria-label="Cancelar eliminación"
-                          className="rounded border border-gray-500 px-2 py-1"
+                          className="btn btn-small"
                         >
                           Cancelar
                         </button>
@@ -428,7 +442,7 @@ export default function DesignList() {
                         type="button"
                         onClick={() => startEdit(d)}
                         aria-label={`Editar ${d.name}`}
-                        className="rounded border border-gray-500 px-2 py-1"
+                        className="btn btn-small"
                       >
                         Editar
                       </button>
@@ -436,7 +450,7 @@ export default function DesignList() {
                         type="button"
                         onClick={() => duplicateDesign(d.id)}
                         aria-label={`Duplicar ${d.name}`}
-                        className="rounded border border-gray-500 px-2 py-1"
+                        className="btn btn-small"
                       >
                         Duplicar
                       </button>
@@ -444,7 +458,7 @@ export default function DesignList() {
                         type="button"
                         onClick={() => setPendingDeleteId(d.id)}
                         aria-label={`Eliminar ${d.name}`}
-                        className="rounded border border-red-500 px-2 py-1 text-red-300"
+                        className="btn btn-small btn-danger"
                       >
                         Eliminar
                       </button>

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { useAppStore } from '../../store/useAppStore'
 import type { DesignInput, Sheet } from '../../types/domain'
@@ -64,9 +64,13 @@ describe('MetricsPanel', () => {
     expect(panel).toHaveTextContent('Planchas: 2')
     expect(panel).toHaveTextContent('Arte visible: 100.0 cm²')
     expect(panel).toHaveTextContent('Área libre: 300.0 cm²')
-    expect(panel).toHaveTextContent(
-      'Plancha 2: 50.0 cm² de arte · 150.0 cm² libres · 25.0% ocupación · 50.0 cm² de footprint físico',
-    )
+    // Per-sheet figures are a labelled block (arte, libre, ocupación, footprint), not a dot-joined line.
+    const block = within(panel).getByRole('heading', { name: 'Plancha 2' }).parentElement!
+    expect(
+      within(block)
+        .getAllByRole('definition')
+        .map((value) => value.textContent),
+    ).toEqual(['50.0 cm²', '150.0 cm²', '25.0%', '50.0 cm²'])
     act(() => {
       useAppStore.getState().updateDesign('logo', { quantity: 3 })
     })

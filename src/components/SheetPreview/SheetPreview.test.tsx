@@ -3,7 +3,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '../../store/useAppStore'
 import type { DesignInput, Sheet } from '../../types/domain'
-import SheetPreview from './SheetPreview'
+import SheetPreview, { sheetPreviewScale } from './SheetPreview'
 
 vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: (path: string) => `mock:${path}` }))
 vi.mock('react-konva', () => ({
@@ -73,6 +73,9 @@ const design: DesignInput = {
     sourceHeightPx: 100,
   },
 }
+// Pixels per cm for the 20 × 10 cm fixture sheet; geometry is asserted relative to it.
+const S = sheetPreviewScale(20, 10)
+
 const sheet: Sheet = {
   id: 's1',
   widthCm: 20,
@@ -134,11 +137,11 @@ describe('SheetPreview (Konva rendering mocked)', () => {
       const artwork = await screen.findByTestId('artwork')
       expect(artwork).toHaveAttribute('data-x', '0')
       expect(artwork).toHaveAttribute('data-y', '0')
-      expect(Number(artwork.dataset.width)).toBeCloseTo(60)
-      expect(Number(artwork.dataset.height)).toBeCloseTo(45.6)
-      expect(Number(artwork.dataset.width)).toBeLessThanOrEqual(60)
-      expect(Number(artwork.dataset.height)).toBeLessThanOrEqual(7.6 * 6)
-      expect(Number(artwork.parentElement?.dataset.x)).toBeCloseTo(rotated ? 45.6 : 0)
+      expect(Number(artwork.dataset.width)).toBeCloseTo(10 * S)
+      expect(Number(artwork.dataset.height)).toBeCloseTo(7.6 * S)
+      expect(Number(artwork.dataset.width)).toBeLessThanOrEqual(10 * S)
+      expect(Number(artwork.dataset.height)).toBeLessThanOrEqual(7.6 * S)
+      expect(Number(artwork.parentElement?.dataset.x)).toBeCloseTo(rotated ? 7.6 * S : 0)
       expect(artwork.parentElement).toHaveAttribute('data-rotation', rotated ? '90' : '0')
     },
   )
@@ -179,8 +182,8 @@ describe('SheetPreview (Konva rendering mocked)', () => {
       const artworks = await screen.findAllByTestId('artwork')
       expect(context.drawImage).toHaveBeenCalledTimes(1)
       expect(artworks[1].parentElement).toHaveAttribute('data-rotation', '90')
-      expect(artworks[1]).toHaveAttribute('data-width', '60')
-      expect(artworks[1]).toHaveAttribute('data-height', '30')
+      expect(artworks[1]).toHaveAttribute('data-width', String(10 * S))
+      expect(artworks[1]).toHaveAttribute('data-height', String(5 * S))
       expect(JSON.parse(artworks[1].getAttribute('data-crop')!)).toEqual({
         x: 51.2,
         y: 25.6,
@@ -223,16 +226,16 @@ describe('SheetPreview (Konva rendering mocked)', () => {
     })
     render(<SheetPreview />)
     expect(screen.getAllByRole('figure')).toHaveLength(2)
-    expect(screen.getByRole('figure', { name: 'Plancha 2' })).toHaveTextContent(
-      '20 × 10 cm · 1 copia',
-    )
+    const second = screen.getByRole('figure', { name: 'Plancha 2' })
+    expect(second).toHaveTextContent('20 × 10 cm')
+    expect(second).toHaveTextContent('1 copia')
     expect(pendingImages).toHaveLength(1)
     expect(pendingImages[0].src).toBe('mock:/logo.svg')
     act(() => pendingImages[0].onload?.(new Event('load')))
     await waitFor(() => expect(screen.getAllByTestId('artwork')).toHaveLength(2))
     const artwork = screen.getAllByTestId('artwork')[1]
-    expect(artwork).toHaveAttribute('data-width', '60')
-    expect(artwork).toHaveAttribute('data-height', '30')
+    expect(artwork).toHaveAttribute('data-width', String(10 * S))
+    expect(artwork).toHaveAttribute('data-height', String(5 * S))
     expect(artwork.parentElement).toHaveAttribute('data-rotation', '90')
     expect(JSON.parse(artwork.getAttribute('data-crop')!)).toEqual({
       x: 40,

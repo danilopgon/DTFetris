@@ -10,7 +10,7 @@ DTFetris es una aplicación de escritorio Tauri 2 con frontend React/TypeScript 
 | Frontend | Vite 6, React 18, TypeScript 5 |
 | Estado | Zustand 5 |
 | Preview | React Konva + Konva |
-| Estilos | Tailwind CSS 3 |
+| Estilos | Tailwind CSS 3 sobre tokens de diseño (`src/tokens.css`, colores del icono de la app), IBM Plex Sans local vía `@fontsource` |
 | Diálogo de archivo | `@tauri-apps/plugin-dialog` 2 (`open()` con filtros PNG/SVG) |
 | Backend local | Rust 2021 via Tauri commands |
 | Plugin diálogo Rust | `tauri-plugin-dialog` 2 |
