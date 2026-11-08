@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { exportPng, loadJob, saveJob } from '../../commands'
 import { useAppStore } from '../../store/useAppStore'
 import { isPositiveIntegerCm, isValidGapCm } from '../../types/domain'
+import logo from '../../assets/logo.png'
 
 type Props = { onBusyChange: (busy: boolean) => void }
 
@@ -103,132 +104,143 @@ export default function JobToolbar({ onBusyChange }: Props) {
     setMessage(`Exportación completada: ${files.length} archivo(s). ${files.join(' · ')}`)
   }
 
+  // One filled control at a time: import (sidebar) with no designs, then generate, then export.
+  const exportReady = !pendingSize && sheets.length > 0 && !stale && unplaced.length === 0
+  const locked = busy || optimizing || importing
+
   return (
-    <header className="border-b border-gray-700 p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">DTFetris</h1>
-        <fieldset disabled={busy || optimizing || importing} className="flex flex-wrap gap-2">
-          <button className="action-secondary" onClick={() => perform(handleLoad)}>
+    <>
+      <header className="shell-top flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-rule bg-paper-2 px-4 py-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <img src={logo} alt="" width={28} height={28} className="shrink-0" />
+          <h1 className="title">DTFetris</h1>
+          {path && <p className="help min-w-0 truncate">Trabajo: {path}</p>}
+        </div>
+        <fieldset disabled={locked} className="flex flex-wrap gap-2">
+          <button type="button" className="btn" onClick={() => perform(handleLoad)}>
             Abrir trabajo
           </button>
           <button
-            className="action-secondary"
+            type="button"
+            className="btn"
             disabled={pendingSize}
             onClick={() => perform(handleSave)}
           >
             Guardar trabajo
           </button>
           <button
-            className="action-primary"
+            type="button"
+            className={exportReady ? 'btn btn-primary' : 'btn'}
             disabled={pendingSize || !sheets.length || stale || unplaced.length > 0}
             onClick={() => perform(handleExport)}
           >
             Exportar PNG · 300 DPI
           </button>
         </fieldset>
-      </div>
-      <fieldset
-        disabled={busy || optimizing || importing}
-        className="flex flex-wrap items-end gap-3"
-      >
-        <label className="text-sm">
-          Ancho de plancha (cm)
-          <input
-            className="number-input"
-            type="number"
-            min="1"
-            step="1"
-            value={sheetWidth}
-            onChange={(e) => setSheetWidth(e.target.value)}
-          />
-        </label>
-        <label className="text-sm">
-          Alto de plancha (cm)
-          <input
-            className="number-input"
-            type="number"
-            min="1"
-            step="1"
-            value={sheetHeight}
-            onChange={(e) => setSheetHeight(e.target.value)}
-          />
-        </label>
-        <label className="text-sm">
-          Separación entre diseños (mm)
-          <input
-            className="number-input"
-            type="number"
-            min="0"
-            step="any"
-            value={sheetGapMm}
-            onChange={(e) => setSheetGapMm(e.target.value)}
-          />
-        </label>
-        <button
-          className="action-secondary"
-          disabled={!pendingSize || !validSize}
-          onClick={() => {
-            useAppStore
-              .getState()
-              .setSheetSize(Number(sheetWidth), Number(sheetHeight), Number(sheetGapMm) / 10)
-            setSheetWidth(String(Number(sheetWidth)))
-            setSheetHeight(String(Number(sheetHeight)))
-            setSheetGapMm(gapInMm(Number(sheetGapMm) / 10))
-            setMessage('Configuración actualizada. Genera de nuevo las planchas.')
-          }}
-        >
-          Aplicar configuración
-        </button>
-        <button
-          className="action-primary"
-          disabled={pendingSize || !designs.length}
-          onClick={() =>
-            perform(async () => {
-              await useAppStore.getState().generateSheets()
-              setMessage('Composición calculada. Revisa todas las planchas antes de exportar.')
-            })
-          }
-        >
-          {optimizing ? 'Distribuyendo…' : 'Generar planchas'}
-        </button>
-      </fieldset>
-      {pendingSize && (
-        <p role="status" className="mt-2 text-sm text-amber-200">
-          {validSize
-            ? 'Aplica la configuración antes de generar, guardar o exportar.'
-            : 'La plancha requiere centímetros enteros mayores que cero y separación finita mayor o igual que cero.'}
-        </p>
-      )}
-      {path && <p className="mt-2 break-all text-xs text-gray-400">Trabajo: {path}</p>}
-      {busy && (
-        <p role="status" className="mt-2 text-sm">
-          Procesando…
-        </p>
-      )}
-      {message && (
-        <p role="status" className="mt-2 break-words text-sm text-green-300">
-          {message}
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="mt-2 break-words text-sm text-red-300">
-          {error}
-        </p>
-      )}
-      {unplaced.length > 0 && (
-        <div role="alert" className="mt-3 text-sm text-amber-200">
-          <p>
-            No se pueden exportar todas las copias: {unplaced.length} no caben. Amplía la plancha,
-            reduce sus medidas máximas o la separación, o permite rotación y vuelve a generar.
+      </header>
+      <div className="shell-config space-y-3 border-b border-rule px-6 py-4">
+        <fieldset disabled={locked} className="flex flex-wrap items-end gap-3">
+          <label>
+            <span className="label">Ancho de plancha (cm)</span>
+            <input
+              className="field field-num"
+              type="number"
+              min="1"
+              step="1"
+              value={sheetWidth}
+              onChange={(e) => setSheetWidth(e.target.value)}
+            />
+          </label>
+          <label>
+            <span className="label">Alto de plancha (cm)</span>
+            <input
+              className="field field-num"
+              type="number"
+              min="1"
+              step="1"
+              value={sheetHeight}
+              onChange={(e) => setSheetHeight(e.target.value)}
+            />
+          </label>
+          <label>
+            <span className="label">Separación entre diseños (mm)</span>
+            <input
+              className="field field-num"
+              type="number"
+              min="0"
+              step="any"
+              value={sheetGapMm}
+              onChange={(e) => setSheetGapMm(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn"
+            disabled={!pendingSize || !validSize}
+            onClick={() => {
+              useAppStore
+                .getState()
+                .setSheetSize(Number(sheetWidth), Number(sheetHeight), Number(sheetGapMm) / 10)
+              setSheetWidth(String(Number(sheetWidth)))
+              setSheetHeight(String(Number(sheetHeight)))
+              setSheetGapMm(gapInMm(Number(sheetGapMm) / 10))
+              setMessage('Configuración actualizada. Genera de nuevo las planchas.')
+            }}
+          >
+            Aplicar configuración
+          </button>
+          <button
+            type="button"
+            className={exportReady || !designs.length ? 'btn' : 'btn btn-primary'}
+            disabled={pendingSize || !designs.length}
+            aria-busy={optimizing}
+            onClick={() =>
+              perform(async () => {
+                await useAppStore.getState().generateSheets()
+                setMessage('Composición calculada. Revisa todas las planchas antes de exportar.')
+              })
+            }
+          >
+            {optimizing ? 'Distribuyendo…' : 'Generar planchas'}
+          </button>
+        </fieldset>
+        {pendingSize && (
+          <p role="status" className="notice">
+            {validSize
+              ? 'Aplica la configuración antes de generar, guardar o exportar.'
+              : 'La plancha requiere centímetros enteros mayores que cero y separación finita mayor o igual que cero.'}
           </p>
-          <ul>
-            {[...new Set(unplaced.map((item) => item.designId))].map((id) => (
-              <li key={id}>{designs.find((d) => d.id === id)?.name ?? id}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </header>
+        )}
+        {busy && (
+          <p role="status" className="help">
+            Procesando…
+          </p>
+        )}
+        {message && (
+          <p role="status" className="msg-ok break-words">
+            {message}
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="msg-error break-words">
+            {error}
+          </p>
+        )}
+        {unplaced.length > 0 && (
+          <div role="alert" className="notice">
+            <p>
+              No se pueden exportar todas las copias: {unplaced.length} no caben. Amplía la plancha,
+              reduce sus medidas máximas o la separación, o permite rotación y vuelve a generar.
+            </p>
+            <ul className="mt-1 list-disc pl-5">
+              {[...new Set(unplaced.map((item) => item.designId))].map((id) => (
+                <li key={id}>{designs.find((d) => d.id === id)?.name ?? id}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 

@@ -1,0 +1,26 @@
+[
+ {
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "app",
+  "shape": "app screen",
+  "theme": "brand",
+  "axes": "dark/grotesk-sans/chromatic-ochre",
+  "nav": "top bar, wordmark and the job actions",
+  "footer": "none (app)",
+  "hero": "none (app)",
+  "imagery": "the product itself",
+  "photos": [],
+  "entry": "src/index.css",
+  "sections": [
+   "designs side panel",
+   "sheet header",
+   "sheet stage",
+   "metrics rail"
+  ],
+  "signature": "the sheet set large on its transparency board",
+  "waived": [],
+  "prompt": "DTF sheet composer desktop tool, workshop tone",
+  "date": "2026-11-08"
+ }
+]

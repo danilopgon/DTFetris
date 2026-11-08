@@ -10,6 +10,16 @@ import {
   type PreviewSource,
 } from './tintedPreview'
 
+/** Pixels per cm: every sheet fills a 520 × 720 px box, so small sheets are not drawn tiny. */
+export function sheetPreviewScale(widthCm: number, heightCm: number) {
+  return Math.min(520 / widthCm, 720 / heightCm)
+}
+
+// Konva paints on canvas, outside CSS: read the design tokens from the root at render time.
+function tokenColor(name: string) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
 export default function SheetPreview() {
   const sheets = useAppStore((s) => s.sheets)
   const designs = useAppStore((s) => s.designs)
@@ -71,25 +81,25 @@ export default function SheetPreview() {
 
   return (
     <section aria-label="Vista previa de las planchas">
-      <h2 className="mb-2 text-lg font-semibold">Vista previa</h2>
-      <p className="mb-4 text-sm text-gray-400">
+      <h2 className="title mb-1">Vista previa</h2>
+      <p className="help mb-6 max-w-[75ch]">
         El fondo gris representa transparencia; no se imprime. El borde delimita el tamaño visible
         colocado. La separación entre diseños no es padding transparente del archivo.
       </p>
       {failed.length > 0 && (
-        <p role="alert" className="mb-3 text-sm text-red-300">
+        <p role="alert" className="msg-error mb-3">
           No se pudieron cargar {failed.length} imágenes del trabajo. Comprueba que los archivos
           locales siguen disponibles antes de exportar.
         </p>
       )}
       {previews.failed && (
-        <p role="alert" className="mb-3 text-sm text-red-300">
+        <p role="alert" className="msg-error mb-3">
           No se pudo mostrar el color del diseño. Vuelve a abrir el trabajo para reintentar.
         </p>
       )}
       {sheets.length === 0 ? (
-        <div>
-          <p className="mb-3 text-sm text-gray-300">
+        <div className="flex flex-col items-center">
+          <p className="help mb-3">
             {stale
               ? 'Composición pendiente. Pulsa Generar planchas.'
               : 'Importa diseños y pulsa Generar planchas para ver el resultado.'}
@@ -101,25 +111,30 @@ export default function SheetPreview() {
               aspectRatio: `${config.widthCm} / ${config.heightCm}`,
               maxWidth: '100%',
             }}
-            className="border border-dashed border-gray-500 bg-gray-800"
+            className="border border-dashed border-muted bg-paper-3"
           />
         </div>
       ) : (
-        <div className="flex flex-wrap items-start gap-6">
+        <div className="flex flex-wrap items-start justify-center gap-10">
           {sheets.map((sheet, index) => {
-            const scale = Math.min(6, 520 / sheet.widthCm, 720 / sheet.heightCm)
+            const scale = sheetPreviewScale(sheet.widthCm, sheet.heightCm)
             return (
               <figure key={sheet.id} aria-label={`Plancha ${index + 1}`}>
-                <figcaption className="mb-2 text-sm font-medium">
-                  Plancha {index + 1} · {sheet.widthCm} × {sheet.heightCm} cm ·{' '}
-                  {sheet.placements.length} {sheet.placements.length === 1 ? 'copia' : 'copias'}
+                <figcaption className="mb-2 flex flex-wrap items-baseline gap-x-4 text-sm tabular-nums">
+                  <span className="font-semibold">Plancha {index + 1}</span>
+                  <span className="text-ink-2">
+                    {sheet.widthCm} × {sheet.heightCm} cm
+                  </span>{' '}
+                  <span className="text-ink-2">
+                    {sheet.placements.length} {sheet.placements.length === 1 ? 'copia' : 'copias'}
+                  </span>
                 </figcaption>
                 <Stage width={sheet.widthCm * scale} height={sheet.heightCm * scale}>
                   <Layer listening={false}>
                     <Rect
                       width={sheet.widthCm * scale}
                       height={sheet.heightCm * scale}
-                      fill="#d1d5db"
+                      fill={tokenColor('--color-board')}
                     />
                     {sheet.placements.map((placement, i) => {
                       const design = byId.get(placement.designId)
@@ -139,7 +154,7 @@ export default function SheetPreview() {
                           <Rect
                             width={placement.widthCm * scale}
                             height={placement.heightCm * scale}
-                            stroke={image ? '#64748b' : '#b91c1c'}
+                            stroke={tokenColor(image ? '--color-board-edge' : '--color-error')}
                             strokeWidth={0.5}
                           />
                           {image && sourceSize && (
