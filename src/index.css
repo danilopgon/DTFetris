@@ -255,7 +255,11 @@
     border-right: 0;
     border-block: var(--rule-hair) solid var(--color-rule);
   }
-  .shell-stage,
+  /* html and body clip horizontal overflow, so a sheet wider than the screen scrolls inside the stage. */
+  .shell-stage {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
   .shell-metrics {
     overflow: visible;
   }

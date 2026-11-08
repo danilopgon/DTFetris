@@ -75,7 +75,7 @@ Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDr
 
 ### Vista previa en ventana estrecha
 
-- `tests/e2e/narrow-stage.spec.ts`: a 1000 px de ventana, una plancha más ancha que el escenario empieza dentro de él y se puede recorrer entera con el scroll (centrado seguro, `justify-content: safe center`).
+- `tests/e2e/narrow-stage.spec.ts`: a 1000 px de ventana, una plancha más ancha que el escenario empieza dentro de él y se puede recorrer entera con el scroll (centrado seguro, `justify-content: safe center`); a 400 px, en una columna, el escenario conserva su scroll horizontal y llega al borde derecho de la plancha.
 
 ### Color único
 
