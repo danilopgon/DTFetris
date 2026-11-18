@@ -20,6 +20,7 @@ Esta carpeta reemplaza el BRS monolítico por documentos enfocados. Úsala como 
 | Evidencia de entrega, decisiones y límites verificados | [final-review.md](./final-review.md) |
 | Continuar el MVP: relevo, pedido de 10 mm y pendientes de aceptación | [handoff-mvp.md](./handoff-mvp.md) |
 | Preparar trabajos con un agente MCP y carpeta de ingesta | [agent-integration.md](./agent-integration.md) |
+| Flujo completo de un encargo real con el MCP (skill de agente, copia genérica) | [.agents/skills/dtf-encargo/SKILL.md](../.agents/skills/dtf-encargo/SKILL.md) |
 
 ## Estado del producto
 
