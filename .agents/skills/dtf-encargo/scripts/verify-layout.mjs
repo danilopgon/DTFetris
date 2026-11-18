@@ -72,6 +72,8 @@ if (Array.isArray(data)) {
 }
 if (!layout || !job) throw new Error('No se encontró layout y job en el JSON.')
 const sheet = layout.sheets[Number(sheetIndexArg ?? 0)]
+// A missing gapCm is the legacy zero-gap contract (validate_gap_cm in the app).
+const gapMm = (sheet.gapCm ?? 0) * 10
 const names = Object.fromEntries(job.designs.map((d) => [d.id, d.name]))
 const img = decodePng(pngFile)
 const PX = 300 / 2.54
@@ -133,7 +135,7 @@ for (const r of rects) {
 const expectedW = Math.round(sheet.widthCm * PX)
 const expectedH = Math.round(sheet.heightCm * PX)
 const report = {
-  sheet: `${sheet.widthCm} x ${sheet.heightCm} cm, separación ${sheet.gapCm * 10} mm`,
+  sheet: `${sheet.widthCm} x ${sheet.heightCm} cm, separación ${gapMm} mm`,
   png: `${img.width}x${img.height}`,
   sizeOk: img.width === expectedW && img.height === expectedH,
   dpiOk: img.phys?.unit === 1 && img.phys.x === 11811 && img.phys.y === 11811,
@@ -150,6 +152,6 @@ report.ok =
   report.dpiOk &&
   outside === 0 &&
   worstEdgeSlackPx <= 2 &&
-  report.measuredMinGapMm >= sheet.gapCm * 10 - 0.2
+  report.measuredMinGapMm >= gapMm - 0.2
 console.log(JSON.stringify(report, null, 1))
 process.exitCode = report.ok ? 0 : 1

@@ -37,7 +37,9 @@ for (const [name, a] of calls) {
   const r = await rpc('tools/call', { name, arguments: a })
   const res = r.result?.structuredContent ?? r.error
   out.push({ name, isError: r.result?.isError ?? true, result: res })
-  if (r.result?.isError) break
+  // A tool error (result.isError) or a JSON-RPC error (unknown tool, bad params) stops the
+  // batch, so later packing, saving or export never run on state the failed call did not set.
+  if (r.error || r.result?.isError) break
 }
 child.stdin.end()
 console.log(JSON.stringify(out, null, 1))
