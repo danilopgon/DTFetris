@@ -89,3 +89,7 @@ Referencias: [transporte MCP](https://modelcontextprotocol.io/specification/2025
 > En `pedido/varios-logos.png` hay varios logos. Detecta las regiones y enséñame la vista previa. Después importa la región del escudo con medidas máximas de 8 × 8 cm, 12 copias y color `#C0C0C0`.
 
 El agente llama a `detect_regions`, abre `previewPath` para identificar el número del escudo (o te lo pregunta) y llama a `import_design_region` con ese índice y el `detectionId` de esa detección. Si el escudo y su texto salen separados, puede repetir la detección con un `mergePx` mayor o combinar índices (`"regions": [2, 3]`).
+
+## Skill de encargo
+
+`.agents/skills/dtf-encargo/` guarda una copia genérica de la skill que orquesta un encargo real de principio a fin. Cubre interpretar el pedido, recortar logos de planchas anteriores, elegir tamaños con tabla de desviación, montar la plancha completa, ajustar el margen, llenar una plancha con un solo diseño, verificar el PNG de forma independiente y archivarlo. La instalación real está en `~/.claude/skills/dtf-encargo`, con las rutas del taller. Esta copia no lleva rutas ni nombres de clientes: `scripts/mcp-client.mjs` lee `DTFETRIS_INGEST`, `DTFETRIS_WORKSPACE` y, opcionalmente, `DTFETRIS_MCP`.
