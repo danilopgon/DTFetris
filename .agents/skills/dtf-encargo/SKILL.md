@@ -50,8 +50,10 @@ La clienta escribe cosas como «AYUNTAMIENTO EJEMPLO BOLSILLO 30 UNIDADES COLOR 
 
 ## 4. Montar la plancha
 
-- Usa siempre la **plancha completa**: 60 × 100 cm salvo que el usuario diga otra cosa. No recortes la plancha al alto mínimo.
-- Separación inicial: **10 mm** (recorte a tijera). `configure_sheet {widthCm:60, heightCm:100, gapCm:1}` y luego `run_packing`. Comprueba que hay una sola hoja y nada sin ubicar.
+- Usa siempre la **plancha completa**: **58 × 100 cm** (ancho útil del proveedor desde 2026-11-20) salvo que el usuario diga otra cosa. No recortes la plancha al alto mínimo.
+- Separación inicial: **10 mm** (recorte a tijera). **Margen exterior**: libre en los cuatro bordes; 10 mm por defecto, y a tijera conviene tanto como la separación (el usuario eligió 20 mm al ver piezas finas pegadas al borde). `configure_sheet {widthCm:58, heightCm:100, gapCm:1, marginCm:1}` y luego `run_packing`. Comprueba cuántas hojas salen y que nada queda sin ubicar.
+- Si las piezas no caben en las hojas previstas con el margen y la separación deseados, ofrece combinaciones (por ejemplo «3 planchas: borde 20 mm y 13 mm entre piezas, o 4 planchas con 20/20»), con `AskUserQuestion`.
+- Varias planchas: `export_png` crea `nombre-001.png`, `-002`, …; verifica cada una pasando su índice a `verify-layout.mjs`.
 - Nombres de diseño: `Cliente (variante, color)`, por ejemplo `Ayuntamiento Ejemplo (bolsillo, blanco)`.
 
 ### Llenar la plancha con un solo diseño
@@ -64,6 +66,18 @@ Pedidos como «todo el metro con ese logo» o «una plancha llena» no traen can
 4. Calcula alternativas de más copias con menos margen (por ejemplo, «33 con hasta 6,5 mm, 34 con hasta 3,5 mm, 35 no caben») y ponlas en el informe y en el LEEME para que el usuario elija.
 5. Guarda solo el trabajo final. Los tanteos intermedios no se guardan, o se guardan con un nombre que diga que son borradores.
 
+### Textos nuevos y recolorear parte de un logo
+
+La app solo cambia el color de un diseño entero. Para pedidos como «añadir debajo SAD», «MANTENIMIENTO en rojo para acoplar al logo» o «letras en blanco» (y el escudo con sus colores), prepara el arte fuera con `scripts/text-tools.mjs`, como una preparación externa más:
+
+1. Recorta el logo de su plancha a PNG (por ejemplo con `System.Drawing` `Clone(rect)` en PowerShell, sobre la caja de `detect_regions`).
+2. `sample --in logo.png --keep-largest` devuelve el color de las letras que rodean al elemento principal (el arco rojo del escudo fue `#ED1C24`).
+3. `recolor --in logo.png --to "#FFFFFF" --keep-largest --out logo-blanco.png` cambia solo las letras, y deja intacto el escudo (la pieza conectada más grande) y lo que no coincide con el color.
+4. `stack --in logo-blanco.png --text "SAD" --color "#FFFFFF" --out logo-sad.png` añade el texto centrado debajo, con una altura de mayúscula parecida a la del arco (`--cap-px` y `--gap-px` para ajustarla).
+5. `text --text "MANTENIMIENTO" --color "#ED1C24" --out palabra.png` crea una palabra suelta; su tamaño se fija luego en cm al importarla (por ejemplo, el ancho del logo al que se acopla).
+6. Tipografía por defecto: **Open Sans Bold**, que coincidió con la letra de los logos del taller (no Roboto); otra con `--font`. Pregunta si hay duda.
+7. Mira el resultado sobre fondo oscuro con `preview.ps1`, cópialo a `DTF\Logos\<cliente>\` con un nombre que describa la variante, e impórtalo con `import_design`.
+
 ## 5. Hueco sobrante
 
 Calcula la ocupación (suma del área de los rectángulos colocados entre el área de la plancha) y haz un **barrido fino de `gapCm`** (pasos de 0,05 cm) para hallar la separación máxima que sigue cabiendo en una plancha. Luego pregunta:
@@ -75,7 +89,7 @@ Calcula la ocupación (suma del área de los rectángulos colocados entre el ár
 ## 6. Exportar, verificar y entregar
 
 1. `save_job` (por ejemplo `encargo-<fecha>.json`, con `overwrite:true` si es el mismo encargo) y después `export_png {name, confirm:true}`. Los PNG nunca se sobrescriben: usa un nombre nuevo por versión.
-2. Verifica de forma independiente: `node --max-old-space-size=4096 scripts/verify-layout.mjs <png> <layout.json>`, pasándole el array de `mcp-client.mjs` o `{layout, job}` guardado desde las respuestas de las herramientas. Debe dar `ok: true`: tamaño y DPI correctos, 0 píxeles visibles fuera de las piezas, la separación medida (con la tolerancia de redondeo a píxel) y cada pieza llenando su caja.
+2. Verifica de forma independiente: `node --max-old-space-size=4096 scripts/verify-layout.mjs <png> <layout.json>`, pasándole el array de `mcp-client.mjs` o `{layout, job}` guardado desde las respuestas de las herramientas. Debe dar `ok: true`: tamaño y DPI correctos, 0 píxeles visibles fuera de las piezas, la separación medida y el **borde libre medido** (`measuredMinBorderMm` frente a `marginMm`), ambos con la tolerancia de redondeo a píxel, y cada pieza llenando su caja.
 3. Haz la vista `VISTA-NO-IMPRIMIR.png` con `scripts/preview.ps1` (fondo oscuro) y **mírala**: cantidades por diseño, colores y nada cortado.
 4. Mueve las versiones superadas a `exports\descartados\`.
 5. Escribe `LEEME-<encargo>.txt` en el workspace con estos datos:
@@ -84,7 +98,7 @@ Calcula la ocupación (suma del área de los rectángulos colocados entre el ár
    - cada diseño con cantidad, tamaño y color;
    - la tabla de desviaciones;
    - «imprimir al 100 %, sin espejo ni base blanca automáticos»;
-   - el aviso de que las piezas pueden tocar el borde, porque no hay margen exterior;
+   - el margen exterior usado y el borde libre medido (con margen 0 las piezas pueden tocar el borde);
    - las fuentes usadas.
 6. Cuando el usuario valide, **archiva** una copia del PNG final en la ingesta `DTF\` con el nombre de los clientes (`Cliente A + Cliente B.png`), sin sobrescribir, y comprueba el hash. Si el nombre natural ya existe (`Cliente grande.png` es otra plancha), añade lo que distingue a esta (`Cliente logo grande x31.png`). Marca el LEEME como validado y anota la ruta de la copia.
 

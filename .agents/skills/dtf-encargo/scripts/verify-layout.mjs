@@ -92,6 +92,11 @@ const rects = sheet.placements.map((p) => ({
   ay1: -1,
 }))
 let outside = 0
+// Clear border actually left between the ink and each sheet edge.
+let inkX0 = Infinity
+let inkY0 = Infinity
+let inkX1 = -1
+let inkY1 = -1
 const colors = new Map()
 for (let y = 0; y < img.height; y++) {
   for (let x = 0; x < img.width; x++) {
@@ -100,6 +105,12 @@ for (let y = 0; y < img.height; y++) {
     if (a === 255) {
       const k = `${img.px[i]},${img.px[i + 1]},${img.px[i + 2]}`
       colors.set(k, (colors.get(k) ?? 0) + 1)
+    }
+    if (a > 0) {
+      if (x < inkX0) inkX0 = x
+      if (y < inkY0) inkY0 = y
+      if (x > inkX1) inkX1 = x
+      if (y > inkY1) inkY1 = y
     }
     if (a < 3) continue
     const r = rects.find((r) => x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1)
@@ -142,6 +153,11 @@ const report = {
   placements: rects.length,
   visiblePixelsOutsidePlacements: outside,
   measuredMinGapMm: +((minArtGapPx * 25.4) / 300).toFixed(3),
+  marginMm: (sheet.marginCm ?? 0) * 10,
+  measuredMinBorderMm: +(
+    (Math.min(inkX0, inkY0, img.width - 1 - inkX1, img.height - 1 - inkY1) * 25.4) /
+    300
+  ).toFixed(3),
   worstEdgeSlackPx,
   artOccupancyPct: +((artCm2 / (sheet.widthCm * sheet.heightCm)) * 100).toFixed(1),
   perDesign,
@@ -152,6 +168,7 @@ report.ok =
   report.dpiOk &&
   outside === 0 &&
   worstEdgeSlackPx <= 2 &&
-  report.measuredMinGapMm >= gapMm - 0.2
+  report.measuredMinGapMm >= gapMm - 0.2 &&
+  report.measuredMinBorderMm >= report.marginMm - 0.2
 console.log(JSON.stringify(report, null, 1))
 process.exitCode = report.ok ? 0 : 1
