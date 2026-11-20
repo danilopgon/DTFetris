@@ -84,7 +84,7 @@ Solo por MCP (`detect_regions`, `import_design_region`) y solo para PNG con fond
 
 - Una región parte de islas de píxeles visibles con el mismo umbral (alpha `>= 3/255`) y conectividad de 8 vecinos.
 - Las islas cuya caja queda a menos de `mergePx` de otra se agrupan, por defecto 24 px (≈ 2 mm a 300 DPI); también las solapadas o contenidas, como un halo dentro del agujero de un logo. La agrupación se repite hasta estabilizarse. Las regiones se numeran desde 1 en orden de lectura.
-- Si todo el borde de 1 px es visible, el PNG se considera de fondo opaco y se rechaza. Basta un píxel transparente en el borde: las planchas empaquetadas no tienen margen exterior y sus piezas tocan esquinas. Más de 4096 islas también se rechaza: no es un conjunto de logos.
+- Si todo el borde de 1 px es visible, el PNG se considera de fondo opaco y se rechaza. Basta un píxel transparente en el borde: las planchas empaquetadas sin margen exterior tienen piezas tocan esquinas. Más de 4096 islas también se rechaza: no es un conjunto de logos.
 - El recorte es la caja conjunta de las regiones elegidas. Los píxeles de otras regiones que caigan dentro pasan a transparentes; los débiles bajo el umbral se conservan para no cortar el antialiasing. Un `rectPx` copia el rectángulo tal cual.
 - El recorte se guarda como PNG nuevo en `design-assets` y sus límites visibles se recalculan desde ese archivo. El original no se modifica.
 - La numeración depende de los bytes del archivo y de `mergePx`. `detectionId` los identifica, y la importación por índices lo exige y lo comprueba contra el archivo actual.
@@ -269,7 +269,9 @@ struct Sheet {
 - `SheetConfig.gapCm` y `Sheet.gapCm` son opcionales; ausentes significan 0 para trabajos anteriores. Los trabajos nuevos UI/MCP comienzan con **0.3 cm (3 mm)**, configurable. La interfaz muestra mm y persiste cm.
 - La separación es finita, no negativa y hasta `u32::MAX` cm; admite fracciones.
 - Packing usa punto fijo de **0.0001 cm (1 micrómetro)**, nunca píxeles. Redondea hacia fuera tamaño visible/separación para no recortarlos; los placements admiten cm fraccionarios. La holgura es inferior a 1 micrómetro por dimensión.
-- Se infla por derecha/abajo el rectángulo de búsqueda y la hoja virtual. El arte queda dentro de la plancha física, sin exigir margen exterior.
+- Se infla por derecha/abajo el rectángulo de búsqueda y la hoja virtual. El arte queda dentro de la plancha física.
+- `SheetConfig.marginCm` y `Sheet.marginCm` son opcionales: **margen libre en los cuatro bordes**. Ausente significa 0 (trabajos anteriores); los trabajos nuevos UI/MCP comienzan con **1 cm (10 mm)**. Debe ser finito, no negativo y dejar área interior (`2 × margen < ancho` y `< alto`). El packing usa solo el área interior (el margen se redondea hacia fuera a la misma precisión) y desplaza cada placement por el margen; la exportación rechaza piezas que entren en la franja del margen. El PNG mantiene el tamaño completo de la plancha.
+- La plancha por defecto de los trabajos nuevos es **58 × 100 cm**, el ancho útil del proveedor de film. Sigue siendo configurable.
 - Exportación/preview colocan el arte dentro del bbox visible, con solo la holgura de redondeo; no lo centran en una celda vacía de los máximos originales.
 
 ## Color de impresión

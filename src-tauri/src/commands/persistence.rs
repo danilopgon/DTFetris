@@ -1,6 +1,6 @@
 use crate::domain::assets::inspect_asset;
 use crate::domain::design::{fitted_visible_size_cm, parse_color_override, DesignInput};
-use crate::domain::packing::{validate_gap_cm, SheetConfig};
+use crate::domain::packing::{validate_gap_cm, validate_margin_cm, SheetConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
@@ -62,6 +62,11 @@ fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
 
 fn validate_job(job: &Job) -> Result<(), String> {
     validate_gap_cm(job.sheet_config.gap_cm)?;
+    validate_margin_cm(
+        job.sheet_config.margin_cm,
+        job.sheet_config.width_cm,
+        job.sheet_config.height_cm,
+    )?;
     if job.version != JOB_VERSION {
         return Err("La versión del trabajo no es compatible.".into());
     }
@@ -235,6 +240,7 @@ mod tests {
                 version: JOB_VERSION,
                 sheet_config: SheetConfig {
                     gap_cm: None,
+                    margin_cm: None,
                     width_cm: 60.0,
                     height_cm: 100.0,
                 },
@@ -290,6 +296,7 @@ mod tests {
             version: 1,
             sheet_config: SheetConfig {
                 gap_cm: None,
+                margin_cm: None,
                 width_cm: 1.0,
                 height_cm: 2.0,
             },
@@ -572,6 +579,7 @@ mod tests {
             version: 1,
             sheet_config: SheetConfig {
                 gap_cm: None,
+                margin_cm: None,
                 width_cm: 60.0,
                 height_cm: 100.0,
             },

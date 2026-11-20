@@ -10,6 +10,9 @@ use std::collections::BTreeSet;
 pub struct SheetConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gap_cm: Option<f64>,
+    /// Clear border kept on every side of the sheet. Missing is the legacy zero margin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub margin_cm: Option<f64>,
     pub width_cm: f64,
     pub height_cm: f64,
 }
@@ -21,6 +24,23 @@ pub fn validate_gap_cm(gap: Option<f64>) -> Result<f64, String> {
         return Err("La separación debe ser finita y estar entre 0 y 4294967295 cm.".into());
     }
     Ok(gap)
+}
+
+/// Missing margin is the legacy zero-margin contract. Twice the margin must leave a positive
+/// inner area on both axes, so a margin never swallows the whole sheet.
+pub fn validate_margin_cm(
+    margin: Option<f64>,
+    width_cm: f64,
+    height_cm: f64,
+) -> Result<f64, String> {
+    let margin = margin.unwrap_or(0.0);
+    if !margin.is_finite() || margin < 0.0 || margin * 2.0 >= width_cm || margin * 2.0 >= height_cm
+    {
+        return Err(
+            "El margen debe ser finito, no negativo y dejar sitio dentro de la plancha.".into(),
+        );
+    }
+    Ok(margin)
 }
 
 pub const CM_QUANTUM: f64 = 0.0001;
@@ -85,6 +105,12 @@ fn is_positive_integer_cm(value: f64) -> bool {
 
 pub fn validate_packing_request(request: &PackingRequest) -> Result<(), UnplacedReasonCode> {
     if validate_gap_cm(request.sheet.gap_cm).is_err()
+        || validate_margin_cm(
+            request.sheet.margin_cm,
+            request.sheet.width_cm,
+            request.sheet.height_cm,
+        )
+        .is_err()
         || !is_positive_integer_cm(request.sheet.width_cm)
         || !is_positive_integer_cm(request.sheet.height_cm)
         || request.designs.iter().any(|design| {
@@ -226,6 +252,12 @@ pub fn pack(request: &PackingRequest) -> Result<PackingResult, String> {
     }
 
     let gap = ceil_units(validate_gap_cm(request.sheet.gap_cm)?);
+    // The margin is rounded outward too: pieces may only use the inner area, never the border.
+    let margin = ceil_units(validate_margin_cm(
+        request.sheet.margin_cm,
+        request.sheet.width_cm,
+        request.sheet.height_cm,
+    )?);
     // Fixed-point centimeters, rounded outward to one micrometer, never pixels.
     let mut designs = request
         .designs
@@ -245,8 +277,8 @@ pub fn pack(request: &PackingRequest) -> Result<PackingResult, String> {
     let empty = Rect {
         x: 0,
         y: 0,
-        width: ceil_units(request.sheet.width_cm) + gap,
-        height: ceil_units(request.sheet.height_cm) + gap,
+        width: ceil_units(request.sheet.width_cm) - 2 * margin + gap,
+        height: ceil_units(request.sheet.height_cm) - 2 * margin + gap,
     };
     let mut result = PackingResult {
         sheets: Vec::new(),
@@ -317,6 +349,7 @@ pub fn pack(request: &PackingRequest) -> Result<PackingResult, String> {
                 pages.push(vec![empty]);
                 result.sheets.push(Sheet {
                     gap_cm: request.sheet.gap_cm,
+                    margin_cm: request.sheet.margin_cm,
                     id: format!("sheet-{}", pages.len()),
                     width_cm: request.sheet.width_cm,
                     height_cm: request.sheet.height_cm,
@@ -326,8 +359,8 @@ pub fn pack(request: &PackingRequest) -> Result<PackingResult, String> {
             occupy(&mut pages[page_index], used, &mut work)?;
             result.sheets[page_index].placements.push(Placement {
                 design_id: design.id.clone(),
-                x_cm: used.x as f64 / UNITS_PER_CM,
-                y_cm: used.y as f64 / UNITS_PER_CM,
+                x_cm: (used.x + margin) as f64 / UNITS_PER_CM,
+                y_cm: (used.y + margin) as f64 / UNITS_PER_CM,
                 width_cm: (used.width - gap) as f64 / UNITS_PER_CM,
                 height_cm: (used.height - gap) as f64 / UNITS_PER_CM,
                 rotated: score.5,
@@ -377,6 +410,7 @@ mod tests {
         PackingRequest {
             sheet: SheetConfig {
                 gap_cm: None,
+                margin_cm: None,
                 width_cm: width,
                 height_cm: height,
             },
@@ -810,6 +844,7 @@ mod tests {
         let request = PackingRequest {
             sheet: SheetConfig {
                 gap_cm: None,
+                margin_cm: None,
                 width_cm: 60.0,
                 height_cm: 100.0,
             },
@@ -825,6 +860,7 @@ mod tests {
             PackingRequest {
                 sheet: SheetConfig {
                     gap_cm: None,
+                    margin_cm: None,
                     width_cm: 60.5,
                     height_cm: 100.0,
                 },
@@ -833,6 +869,7 @@ mod tests {
             PackingRequest {
                 sheet: SheetConfig {
                     gap_cm: None,
+                    margin_cm: None,
                     width_cm: 0.0,
                     height_cm: 100.0,
                 },
@@ -841,6 +878,7 @@ mod tests {
             PackingRequest {
                 sheet: SheetConfig {
                     gap_cm: None,
+                    margin_cm: None,
                     width_cm: 60.0,
                     height_cm: 100.0,
                 },
@@ -864,6 +902,7 @@ mod tests {
         let request = PackingRequest {
             sheet: SheetConfig {
                 gap_cm: None,
+                margin_cm: None,
                 width_cm: 60.0,
                 height_cm: 100.0,
             },
@@ -881,6 +920,7 @@ mod tests {
         let result = PackingResult {
             sheets: vec![Sheet {
                 gap_cm: None,
+                margin_cm: None,
                 id: "sheet-1".to_string(),
                 width_cm: 60.0,
                 height_cm: 100.0,
@@ -902,5 +942,60 @@ mod tests {
                 "unplacedItems": [{ "designId": "design-1", "itemIndex": 0, "reason": "does_not_fit" }]
             })
         );
+    }
+
+    #[test]
+    fn outer_margin_keeps_every_piece_inside_the_inner_area() {
+        // 10 × 10 cm sheet with a 2 cm margin leaves a 6 × 6 cm inner area.
+        let mut r = request(10.0, 10.0, vec![design("fits", 6.0, 6.0, 1, false)]);
+        r.sheet.margin_cm = Some(2.0);
+        let packed = pack(&r).unwrap();
+        assert!(packed.unplaced_items.is_empty());
+        let p = &packed.sheets[0].placements[0];
+        assert_eq!(
+            (p.x_cm, p.y_cm, p.width_cm, p.height_cm),
+            (2.0, 2.0, 6.0, 6.0)
+        );
+        assert_eq!(packed.sheets[0].margin_cm, Some(2.0));
+
+        // A piece that only fits the full sheet no longer fits.
+        let mut too_big = request(10.0, 10.0, vec![design("big", 7.0, 6.0, 1, false)]);
+        too_big.sheet.margin_cm = Some(2.0);
+        let packed = pack(&too_big).unwrap();
+        assert_eq!(packed.unplaced_items.len(), 1);
+        assert!(packed.sheets.is_empty());
+    }
+
+    #[test]
+    fn outer_margin_with_gap_spreads_copies_and_respects_every_edge() {
+        let mut r = request(20.0, 10.0, vec![design("tile", 4.0, 4.0, 6, false)]);
+        r.sheet.gap_cm = Some(1.0);
+        r.sheet.margin_cm = Some(1.5);
+        let packed = pack(&r).unwrap();
+        assert!(packed.unplaced_items.is_empty());
+        for sheet in &packed.sheets {
+            for p in &sheet.placements {
+                assert!(p.x_cm >= 1.5 && p.y_cm >= 1.5, "{:?}", p);
+                assert!(p.x_cm + p.width_cm <= 20.0 - 1.5 + 1e-9, "{:?}", p);
+                assert!(p.y_cm + p.height_cm <= 10.0 - 1.5 + 1e-9, "{:?}", p);
+            }
+        }
+    }
+
+    #[test]
+    fn missing_margin_is_the_legacy_zero_margin_and_oversized_margins_are_invalid() {
+        let legacy = pack(&request(10.0, 10.0, vec![design("a", 4.0, 4.0, 1, false)])).unwrap();
+        let p = &legacy.sheets[0].placements[0];
+        assert_eq!((p.x_cm, p.y_cm), (0.0, 0.0));
+        assert_eq!(legacy.sheets[0].margin_cm, None);
+        for margin in [5.0, 6.0, -0.1, f64::NAN, f64::INFINITY] {
+            let mut r = request(10.0, 20.0, vec![design("a", 1.0, 1.0, 1, false)]);
+            r.sheet.margin_cm = Some(margin);
+            assert_eq!(
+                validate_packing_request(&r),
+                Err(UnplacedReasonCode::InvalidDimensions),
+                "margin {margin}"
+            );
+        }
     }
 }

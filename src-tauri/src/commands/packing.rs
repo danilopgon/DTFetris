@@ -28,6 +28,7 @@ mod tests {
         PackingRequest {
             sheet: SheetConfig {
                 gap_cm: None,
+                margin_cm: None,
                 width_cm: 60.0,
                 height_cm: 100.0,
             },
@@ -62,6 +63,7 @@ mod tests {
         let request = PackingRequest {
             sheet: SheetConfig {
                 gap_cm: None,
+                margin_cm: None,
                 width_cm: 0.0,
                 height_cm: 100.0,
             },

@@ -6,6 +6,7 @@ import {
   validatePackingRequest,
   isPositiveIntegerCm,
   isValidGapCm,
+  isValidMarginCm,
   type DesignInput,
   type DesignUpdatePatch,
   type DomainValidationError,
@@ -35,7 +36,7 @@ type AppState = {
   removeDesign: (id: string) => void
   importDesign: (request: ImportDesignRequest) => Promise<DesignInput>
   setSheets: (sheets: Sheet[]) => void
-  setSheetSize: (widthCm: number, heightCm: number, gapCm?: number) => void
+  setSheetSize: (widthCm: number, heightCm: number, gapCm?: number, marginCm?: number) => void
   setOptimizing: (value: boolean) => void
   generateSheets: () => Promise<void>
   restoreJob: (job: Job) => void
@@ -113,15 +114,19 @@ export const useAppStore = create<AppState>((set) => ({
     }
   },
   setSheets: (sheets) => set({ sheets, unplacedItems: [], isLayoutStale: false }),
-  setSheetSize: (widthCm, heightCm, gapCm) => {
+  setSheetSize: (widthCm, heightCm, gapCm, marginCm) => {
     if (!isPositiveIntegerCm(widthCm) || !isPositiveIntegerCm(heightCm)) return
     const current = useAppStore.getState().sheetConfig
     const nextGap = gapCm ?? current.gapCm ?? 0
     if (!isValidGapCm(nextGap)) return
+    // An omitted margin keeps the current one, like the gap; legacy jobs keep their zero.
+    const nextMargin = marginCm ?? current.marginCm ?? 0
+    if (!isValidMarginCm(nextMargin, widthCm, heightCm)) return
     if (
       current.widthCm === widthCm &&
       current.heightCm === heightCm &&
-      (current.gapCm ?? 0) === nextGap
+      (current.gapCm ?? 0) === nextGap &&
+      (current.marginCm ?? 0) === nextMargin
     )
       return
     set({
@@ -129,6 +134,9 @@ export const useAppStore = create<AppState>((set) => ({
         widthCm,
         heightCm,
         ...(gapCm !== undefined || current.gapCm !== undefined ? { gapCm: nextGap } : {}),
+        ...(marginCm !== undefined || current.marginCm !== undefined
+          ? { marginCm: nextMargin }
+          : {}),
       },
       sheetWidthCm: widthCm,
       sheetHeightCm: heightCm,

@@ -29,12 +29,17 @@ export type SheetConfig = {
   widthCm: Cm
   heightCm: Cm
   gapCm?: number
+  /** Clear border on every side; missing is the legacy zero margin. */
+  marginCm?: number
 }
 
+// 58 cm: the film supplier's usable width. Keep in sync with the MCP session default (mcp.rs).
 export const DEFAULT_SHEET_CONFIG: SheetConfig = {
-  widthCm: 60,
+  widthCm: 58,
   heightCm: 100,
   gapCm: 0.3,
+  // 10 mm so no piece touches the sheet edge. Keep in sync with the MCP session default.
+  marginCm: 1,
 }
 
 export type DesignInput = {
@@ -69,6 +74,7 @@ export type Sheet = {
   widthCm: Cm
   heightCm: Cm
   gapCm?: number
+  marginCm?: number
   placements: Placement[]
 }
 
@@ -118,6 +124,16 @@ export function isPositiveIntegerCm(value: number): value is Cm {
 
 export function isValidGapCm(value: number): boolean {
   return Number.isFinite(value) && value >= 0 && value <= 4_294_967_295
+}
+
+/** Same contract as validate_margin_cm in Rust: twice the margin leaves a positive inner area. */
+export function isValidMarginCm(
+  value: number | undefined,
+  widthCm: number,
+  heightCm: number,
+): boolean {
+  const margin = value ?? 0
+  return Number.isFinite(margin) && margin >= 0 && margin * 2 < widthCm && margin * 2 < heightCm
 }
 
 function isEditableQuantity(value: number): boolean {
@@ -194,6 +210,10 @@ export function validatePackingRequest(request: PackingRequest): DomainValidatio
 
   if (!isValidGapCm(request.sheet.gapCm ?? 0)) {
     errors.push({ code: 'invalid_dimensions', field: 'sheet.gapCm' })
+  }
+
+  if (!isValidMarginCm(request.sheet.marginCm, request.sheet.widthCm, request.sheet.heightCm)) {
+    errors.push({ code: 'invalid_dimensions', field: 'sheet.marginCm' })
   }
 
   for (const design of request.designs) {

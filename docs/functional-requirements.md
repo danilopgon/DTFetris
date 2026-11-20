@@ -84,7 +84,7 @@ El área utilizada se calculará sobre el rectángulo físico del arte visible c
 
 El sistema permitirá exportar planchas como PNG a 300 DPI.
 
-La composición se realizará en Rust con la crate `image`, sin pasar por Canvas del navegador. Una plancha predeterminada de 60 × 100 cm a 300 DPI produce 7087 × 11811 píxeles y aproximadamente 335 MB RGBA sin comprimir. Las dimensiones siguen siendo configurables.
+La composición se realizará en Rust con la crate `image`, sin pasar por Canvas del navegador. La plancha predeterminada es de 58 × 100 cm (ancho útil del proveedor), 6850 × 11811 píxeles a 300 DPI; una de 60 × 100 cm produce 7087 × 11811 píxeles y aproximadamente 335 MB RGBA sin comprimir. Las dimensiones siguen siendo configurables.
 
 ## RF-011 - Persistencia local
 
@@ -107,7 +107,7 @@ El usuario podrá configurar:
 
 No existirán dimensiones hardcodeadas en el dominio.
 
-La separación entre diseños es configurable en milímetros en la UI y centímetros en el dominio (`gapCm`). Los nuevos trabajos usan 3 mm; JSON anteriores sin campo usan 0. Se garantiza esa separación entre bboxes, sin imponer un margen exterior.
+La separación entre diseños es configurable en milímetros en la UI y centímetros en el dominio (`gapCm`). Los nuevos trabajos usan 3 mm; JSON anteriores sin campo usan 0. Se garantiza esa separación entre bboxes. El margen exterior (`marginCm`, 10 mm en trabajos nuevos y 0 en JSON anteriores sin campo) deja libre el borde de la plancha en los cuatro lados.
 
 ## RF-014 - Validación de proporciones
 

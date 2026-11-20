@@ -19,7 +19,8 @@ Implementación propia Best Short Side Fit; evaluación en [packing-decision.md]
 - Hasta 1000 copias y 5 millones de operaciones contabilizadas; `packing_limit_exceeded` no devuelve una composición parcial.
 - Precisión física de punto fijo: **0.0001 cm = 1 micrómetro**. Se redondea hacia fuera el tamaño visible para no introducir solapamientos ni recortes por coma flotante. Rectángulos/coordenadas `u64`, áreas de ordenación `u128`; no hay DPI en este cálculo.
 - `gapCm` configurable, finito y no negativo. UI muestra mm; nuevos trabajos usan **3 mm**, antiguos sin campo usan 0. La separación se redondea hacia fuera a la misma precisión.
-- Para dejar separación entre bboxes se infla por derecha/abajo el rectángulo virtual de cada pieza y se amplía el bin virtual por esa cantidad. El arte final sigue dentro de la hoja física: no se exige margen exterior.
+- Para dejar separación entre bboxes se infla por derecha/abajo el rectángulo virtual de cada pieza y se amplía el bin virtual por esa cantidad. El arte final sigue dentro de la hoja física.
+- `marginCm` opcional (0 si falta; 1 cm en trabajos nuevos) reserva un borde libre en los cuatro lados: el bin virtual se reduce en `2 × margen` y cada placement se desplaza por el margen. La exportación valida que ninguna pieza entre en esa franja y el PNG conserva el tamaño completo de la plancha.
 
 ## Invalidación
 

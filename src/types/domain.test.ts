@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isValidMarginCm,
   DEFAULT_SHEET_CONFIG,
   getFittedVisibleSizeCm,
   getVisiblePackingFootprintCm,
@@ -129,6 +130,24 @@ describe('visible packing footprint', () => {
     expect(visibleSize).toEqual({ widthCm: 10, heightCm: 7.6 })
     expect(getVisiblePackingFootprintCm(design)).toEqual({ widthCm: 10, heightCm: 7.6 })
     expect(design).toMatchObject({ widthCm: 10, heightCm: 8 })
+  })
+})
+
+describe('default sheet', () => {
+  it('starts new jobs at the supplier width of 58 × 100 cm, matching the MCP session default', () => {
+    expect(DEFAULT_SHEET_CONFIG).toMatchObject({ widthCm: 58, heightCm: 100, marginCm: 1 })
+  })
+
+  it('accepts an outer margin that leaves a positive inner area and rejects the rest', () => {
+    const ok = { widthCm: 10, heightCm: 20, marginCm: 4.9 }
+    expect(validatePackingRequest({ sheet: ok, designs: [baseDesign] })).toEqual([])
+    expect(isValidMarginCm(undefined, 10, 20)).toBe(true)
+    for (const marginCm of [5, 6, -0.1, NaN, Infinity]) {
+      expect(isValidMarginCm(marginCm, 10, 20)).toBe(false)
+      expect(
+        validatePackingRequest({ sheet: { ...ok, marginCm }, designs: [baseDesign] }),
+      ).toContainEqual({ code: 'invalid_dimensions', field: 'sheet.marginCm' })
+    }
   })
 })
 

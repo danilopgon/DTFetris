@@ -9,7 +9,9 @@ use crate::commands::{
 use crate::domain::{
     assets::inspect_asset,
     design::{fitted_visible_size_cm, parse_color_override, DesignInput, ImageFormat},
-    packing::{pack, validate_gap_cm, PackingRequest, PackingResult, SheetConfig},
+    packing::{
+        pack, validate_gap_cm, validate_margin_cm, PackingRequest, PackingResult, SheetConfig,
+    },
     regions::{self, Rect, DEFAULT_MERGE_PX},
 };
 use serde::de::DeserializeOwned;
@@ -209,6 +211,7 @@ struct RemoveArgs {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SheetArgs {
     gap_cm: Option<f64>,
+    margin_cm: Option<f64>,
     width_cm: f64,
     height_cm: f64,
 }
@@ -252,7 +255,10 @@ impl Server {
                 version: 1,
                 sheet_config: SheetConfig {
                     gap_cm: Some(0.3),
-                    width_cm: 60.0,
+                    // 10 mm clear border so no piece touches the edge (same as the app's default).
+                    margin_cm: Some(1.0),
+                    // 58 cm: the film supplier's usable width (same as the app's DEFAULT_SHEET_CONFIG).
+                    width_cm: 58.0,
                     height_cm: 100.0,
                 },
                 designs: vec![],
@@ -266,6 +272,11 @@ impl Server {
 
     fn validate_job(&self, job: &Job, inspect: bool) -> Result<(), String> {
         validate_gap_cm(job.sheet_config.gap_cm)?;
+        validate_margin_cm(
+            job.sheet_config.margin_cm,
+            job.sheet_config.width_cm,
+            job.sheet_config.height_cm,
+        )?;
         if job.version != 1
             || !integer(job.sheet_config.width_cm)
             || !integer(job.sheet_config.height_cm)
@@ -636,6 +647,7 @@ impl Server {
                 let mut job = self.job.clone();
                 job.sheet_config = SheetConfig {
                     gap_cm: a.gap_cm.or(job.sheet_config.gap_cm),
+                    margin_cm: a.margin_cm.or(job.sheet_config.margin_cm),
                     width_cm: a.width_cm,
                     height_cm: a.height_cm,
                 };
@@ -976,8 +988,8 @@ fn tools() -> Vec<Value> {
     );
     add(
         "configure_sheet",
-        "Configura plancha máxima con cm enteros positivos; gapCm opcional conserva la separación actual (sesión nueva: 0.3 cm); invalida layout.",
-        json!({"widthCm":cm,"heightCm":cm,"gapCm":{"type":"number","minimum":0,"maximum":4294967295.0}}),
+        "Configura plancha máxima con cm enteros positivos; gapCm (separación entre piezas) y marginCm (margen libre en cada borde) son opcionales y, si se omiten, se conserva el valor actual (sesión nueva: 0.3 cm y 1 cm); invalida layout.",
+        json!({"widthCm":cm,"heightCm":cm,"gapCm":{"type":"number","minimum":0,"maximum":4294967295.0},"marginCm":{"type":"number","minimum":0,"maximum":4294967295.0}}),
         json!(["widthCm", "heightCm"]),
         false,
         true,

@@ -127,6 +127,12 @@ Pasada `/hallmark redesign src` (profundidad completa, pantalla de aplicación) 
 - Evidencia: sloplint de 11 FAIL y 1 REFLEX a 0/0; revisión final en contexto limpio con veredicto «fix», 3 hallazgos resueltos y 3 descartados con motivo. 149 tests frontend (los de geometría ahora relativos a la escala), 5 E2E con la referencia visual revisada y actualizada, lint, tsc y prueba nativa del EXE en verde.
 - Pendiente: el tablero gris de transparencia (`#d1d5db`, fijado por un test E2E) da poco contraste a diseños blancos o plata en la vista previa; valorar un tablero más oscuro o a cuadros.
 
+### Plancha de 58 cm y margen exterior (2026-11-20, rama `feat/sheet-width-58`)
+
+- El proveedor de film pasa a 58 cm de ancho útil: los trabajos nuevos (app y MCP) empiezan en **58 × 100 cm**.
+- Un encargo real mostró piezas finas tocando el borde de la plancha (riesgo de perderlas al recortar o si el RIP come borde). Nuevo **margen exterior** (`marginCm`), 10 mm en trabajos nuevos, 0 en JSON antiguos: el packing usa solo el área interior y la exportación lo valida. El encargo se rehízo con 20 mm de borde y 13 mm de separación en 3 planchas, con el borde libre medido en el PNG (20,0 mm mínimo).
+- Evidencia: cargo test 114, vitest 154, E2E 7 con la referencia visual revisada, lint y tsc en verde.
+
 Prioridad inmediata: que el usuario compare y apruebe o corrija el encargo de 10 mm antes de darlo por bueno.
 
 Continuación breve: «Lee AGENTS.md y docs/roadmap.md. Conserva la evidencia del MVP base y verifica los incrementos G/H (color y MCP/ingesta). No reintroduzcas un proceso pesado. Para pruebas nativas usa solo fixtures propios y herramientas autorizadas, sin tocar trabajos reales».

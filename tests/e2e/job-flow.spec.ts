@@ -24,8 +24,8 @@ test.describe('Browser UI with mocked Tauri IPC (not native Tauri validation)', 
     await expect(preview.locator('canvas')).toHaveCount(2)
     const metrics = page.getByRole('region', { name: 'Aprovechamiento' })
     await expect(metrics).toContainText('Arte visible: 3600.0 cm²')
-    await expect(metrics).toContainText('Área libre: 8400.0 cm²')
-    await expect(metrics).toContainText('Ocupación: 30.0%')
+    await expect(metrics).toContainText('Área libre: 8000.0 cm²')
+    await expect(metrics).toContainText('Ocupación: 31.0%')
     await expect(page).toHaveScreenshot('composicion-multipagina.png', { fullPage: true })
     await exportButton.click()
     await expect(page.getByText(/Exportación completada: 2/)).toBeVisible()
@@ -41,7 +41,7 @@ test.describe('Browser UI with mocked Tauri IPC (not native Tauri validation)', 
     await expect(page.getByText(/Trabajo guardado\./)).toBeVisible()
     expect(await page.evaluate(() => window.browserMocks.savedJob)).toMatchObject({
       version: 1,
-      sheetConfig: { widthCm: 60, heightCm: 100 },
+      sheetConfig: { widthCm: 58, heightCm: 100, marginCm: 1 },
       designs: [{ quantity: 2 }],
     })
     await page.getByRole('button', { name: 'Duplicar logo.svg', exact: true }).click()
