@@ -2,7 +2,7 @@ import { confirm, open, save } from '@tauri-apps/plugin-dialog'
 import { useEffect, useState } from 'react'
 import { exportPng, loadJob, saveJob } from '../../commands'
 import { useAppStore } from '../../store/useAppStore'
-import { isPositiveIntegerCm, isValidGapCm } from '../../types/domain'
+import { isPositiveIntegerCm, isValidGapCm, isValidMarginCm } from '../../types/domain'
 import logo from '../../assets/logo.png'
 
 type Props = { onBusyChange: (busy: boolean) => void }
@@ -26,20 +26,25 @@ export default function JobToolbar({ onBusyChange }: Props) {
   const [sheetWidth, setSheetWidth] = useState(String(config.widthCm))
   const [sheetHeight, setSheetHeight] = useState(String(config.heightCm))
   const [sheetGapMm, setSheetGapMm] = useState(gapInMm(config.gapCm))
+  const [sheetMarginMm, setSheetMarginMm] = useState(gapInMm(config.marginCm))
   const pendingSize =
     sheetWidth !== String(config.widthCm) ||
     sheetHeight !== String(config.heightCm) ||
-    sheetGapMm !== gapInMm(config.gapCm)
+    sheetGapMm !== gapInMm(config.gapCm) ||
+    sheetMarginMm !== gapInMm(config.marginCm)
   const validSize =
     isPositiveIntegerCm(Number(sheetWidth)) &&
     isPositiveIntegerCm(Number(sheetHeight)) &&
     sheetGapMm.trim() !== '' &&
-    isValidGapCm(Number(sheetGapMm) / 10)
+    isValidGapCm(Number(sheetGapMm) / 10) &&
+    sheetMarginMm.trim() !== '' &&
+    isValidMarginCm(Number(sheetMarginMm) / 10, Number(sheetWidth), Number(sheetHeight))
   useEffect(() => {
     setSheetWidth(String(config.widthCm))
     setSheetHeight(String(config.heightCm))
     setSheetGapMm(gapInMm(config.gapCm))
-  }, [config.widthCm, config.heightCm, config.gapCm])
+    setSheetMarginMm(gapInMm(config.marginCm))
+  }, [config.widthCm, config.heightCm, config.gapCm, config.marginCm])
 
   async function perform(action: () => Promise<void>) {
     setBusy(true)
@@ -173,6 +178,17 @@ export default function JobToolbar({ onBusyChange }: Props) {
               onChange={(e) => setSheetGapMm(e.target.value)}
             />
           </label>
+          <label>
+            <span className="label">Margen exterior (mm)</span>
+            <input
+              className="field field-num"
+              type="number"
+              min="0"
+              step="any"
+              value={sheetMarginMm}
+              onChange={(e) => setSheetMarginMm(e.target.value)}
+            />
+          </label>
           <button
             type="button"
             className="btn"
@@ -180,10 +196,16 @@ export default function JobToolbar({ onBusyChange }: Props) {
             onClick={() => {
               useAppStore
                 .getState()
-                .setSheetSize(Number(sheetWidth), Number(sheetHeight), Number(sheetGapMm) / 10)
+                .setSheetSize(
+                  Number(sheetWidth),
+                  Number(sheetHeight),
+                  Number(sheetGapMm) / 10,
+                  Number(sheetMarginMm) / 10,
+                )
               setSheetWidth(String(Number(sheetWidth)))
               setSheetHeight(String(Number(sheetHeight)))
               setSheetGapMm(gapInMm(Number(sheetGapMm) / 10))
+              setSheetMarginMm(gapInMm(Number(sheetMarginMm) / 10))
               setMessage('Configuración actualizada. Genera de nuevo las planchas.')
             }}
           >
@@ -208,7 +230,7 @@ export default function JobToolbar({ onBusyChange }: Props) {
           <p role="status" className="notice">
             {validSize
               ? 'Aplica la configuración antes de generar, guardar o exportar.'
-              : 'La plancha requiere centímetros enteros mayores que cero y separación finita mayor o igual que cero.'}
+              : 'La plancha requiere centímetros enteros mayores que cero, separación finita mayor o igual que cero y un margen exterior que deje sitio dentro de la plancha.'}
           </p>
         )}
         {busy && (

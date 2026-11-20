@@ -77,6 +77,13 @@ Playwright no puede conectarse mediante `tauri://localhost` ni sustituye a WebDr
 
 - `tests/e2e/narrow-stage.spec.ts`: a 1000 px de ventana, una plancha más ancha que el escenario empieza dentro de él y se puede recorrer entera con el scroll (centrado seguro, `justify-content: safe center`); a 400 px, en una columna, el escenario conserva su scroll horizontal y llega al borde derecho de la plancha.
 
+### Plancha por defecto y margen exterior
+
+- Plancha por defecto de 58 × 100 cm con 10 mm de margen, fijada por tests en TypeScript (`DEFAULT_SHEET_CONFIG`) y en el MCP (sesión nueva), para que no diverjan.
+- Packing con `marginCm`: las piezas quedan en el área interior y desplazadas, una pieza que solo cabía en la plancha completa deja de caber, margen + separación respetan los cuatro bordes, sin margen equivale al contrato antiguo y un margen que no deja área interior se rechaza.
+- Exportación: una pieza dentro de la franja del margen se rechaza. MCP: `configure_sheet` conserva o fija el margen y el packing lo respeta.
+- UI: el campo «Margen exterior (mm)» muestra 10 en trabajos nuevos y 0 en antiguos, convierte mm a cm y no deja aplicar un margen sin área interior.
+
 ### Color único
 
 - Validación estricta `#RRGGBB` en TS/Rust; ausente/null mantiene originales. Se rechazan abreviaturas, nombres y hex con alpha.

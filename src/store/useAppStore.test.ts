@@ -46,7 +46,12 @@ describe('useAppStore sheet configuration', () => {
   it('preserves the current separation on a size-only change and invalidates on a gap-only change', () => {
     useAppStore.setState(useAppStore.getInitialState(), true)
     useAppStore.getState().setSheetSize(40, 80)
-    expect(useAppStore.getState().sheetConfig).toEqual({ widthCm: 40, heightCm: 80, gapCm: 0.3 })
+    expect(useAppStore.getState().sheetConfig).toEqual({
+      widthCm: 40,
+      heightCm: 80,
+      gapCm: 0.3,
+      marginCm: 1,
+    })
     useAppStore
       .getState()
       .setSheets([{ id: 'ready', widthCm: 40, heightCm: 80, gapCm: 0.3, placements: [] }])
@@ -61,6 +66,26 @@ describe('useAppStore sheet configuration', () => {
     expect(useAppStore.getState()).toBe(current)
   })
 
+  it('keeps the margin on a size-only change, applies a valid new margin and ignores invalid ones', () => {
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    useAppStore.getState().setSheetSize(40, 80)
+    expect(useAppStore.getState().sheetConfig).toEqual({
+      widthCm: 40,
+      heightCm: 80,
+      gapCm: 0.3,
+      marginCm: 1,
+    })
+    useAppStore.getState().setSheetSize(40, 80, 0.3, 2)
+    expect(useAppStore.getState()).toMatchObject({
+      sheetConfig: { marginCm: 2 },
+      isLayoutStale: true,
+    })
+    const current = useAppStore.getState()
+    for (const invalid of [-1, NaN, 20, 25])
+      useAppStore.getState().setSheetSize(40, 80, 0.3, invalid)
+    expect(useAppStore.getState()).toBe(current)
+  })
+
   it('restores old jobs without inventing a gap and restores explicit gaps unchanged', () => {
     useAppStore.setState(useAppStore.getInitialState(), true)
     useAppStore
@@ -69,13 +94,11 @@ describe('useAppStore sheet configuration', () => {
     expect(useAppStore.getState().sheetConfig.gapCm ?? 0).toBe(0)
     useAppStore.getState().setSheetSize(35, 40)
     expect(useAppStore.getState().sheetConfig.gapCm).toBeUndefined()
-    useAppStore
-      .getState()
-      .restoreJob({
-        version: 1,
-        sheetConfig: { widthCm: 30, heightCm: 40, gapCm: 0.3 },
-        designs: [],
-      })
+    useAppStore.getState().restoreJob({
+      version: 1,
+      sheetConfig: { widthCm: 30, heightCm: 40, gapCm: 0.3 },
+      designs: [],
+    })
     expect(useAppStore.getState().sheetConfig.gapCm).toBe(0.3)
   })
 
@@ -121,15 +144,20 @@ describe('useAppStore sheet configuration', () => {
     expect(useAppStore.getState().sheets).toEqual([])
     expect(useAppStore.getState().isLayoutStale).toBe(true)
     useAppStore.getState().setSheetSize(0, 10)
-    expect(useAppStore.getState().sheetConfig).toEqual({ widthCm: 40, heightCm: 80, gapCm: 0.3 })
+    expect(useAppStore.getState().sheetConfig).toEqual({
+      widthCm: 40,
+      heightCm: 80,
+      gapCm: 0.3,
+      marginCm: 1,
+    })
   })
-  it('initializes new work with the default 60 cm x 100 cm sheet configuration', () => {
+  it('initializes new work with the default 58 cm x 100 cm sheet configuration', () => {
     useAppStore.setState(useAppStore.getInitialState(), true)
 
     const state = useAppStore.getState()
 
     expect(state.sheetConfig).toEqual(DEFAULT_SHEET_CONFIG)
-    expect(state.sheetWidthCm).toBe(60)
+    expect(state.sheetWidthCm).toBe(58)
     expect(state.sheetHeightCm).toBe(100)
   })
 
@@ -140,7 +168,7 @@ describe('useAppStore sheet configuration', () => {
 
     const state = useAppStore.getState()
 
-    expect(state.sheetConfig).toEqual({ widthCm: 40, heightCm: 80, gapCm: 0.3 })
+    expect(state.sheetConfig).toEqual({ widthCm: 40, heightCm: 80, gapCm: 0.3, marginCm: 1 })
     expect(state.sheetWidthCm).toBe(40)
     expect(state.sheetHeightCm).toBe(80)
   })
@@ -269,7 +297,7 @@ describe('packing orchestration', () => {
     runPackingMock.mockResolvedValue(result)
     await useAppStore.getState().generateSheets()
     expect(runPackingMock).toHaveBeenCalledWith({
-      sheet: { widthCm: 60, heightCm: 100, gapCm: 0.3 },
+      sheet: { widthCm: 58, heightCm: 100, gapCm: 0.3, marginCm: 1 },
       designs: [makeDesign()],
     })
     expect(useAppStore.getState()).toMatchObject({

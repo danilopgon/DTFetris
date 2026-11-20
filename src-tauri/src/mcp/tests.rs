@@ -56,8 +56,11 @@ fn public_doctype_import_save_pack_export_and_detailed_metadata_failure() {
     let bytes = br#"<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"><rect width="8" height="4" fill="red"/></svg>"#;
     fs::write(&path, bytes).unwrap();
     let mut s = f.server();
-    s.call("configure_sheet", json!({"widthCm":1,"heightCm":1}))
-        .unwrap();
+    s.call(
+        "configure_sheet",
+        json!({"widthCm":1,"heightCm":1,"marginCm":0}),
+    )
+    .unwrap();
     import(&mut s, "public.svg");
     s.call("save_job", json!({"name":"public.json"})).unwrap();
     s.call("load_job", json!({"name":"public.json"})).unwrap();
@@ -97,6 +100,13 @@ fn sheet_gap_defaults_to_three_mm_preserves_omitted_updates_and_loads_legacy_zer
     let f = Fixture::new();
     let mut s = f.server();
     assert_eq!(s.job.sheet_config.gap_cm, Some(0.3));
+    // New sessions start at the supplier width with a 1 cm clear border, like the app.
+    assert_eq!(s.job.sheet_config.margin_cm, Some(1.0));
+    // New sessions start at the supplier width, the same default as the app (58 × 100 cm).
+    assert_eq!(
+        (s.job.sheet_config.width_cm, s.job.sheet_config.height_cm),
+        (58.0, 100.0)
+    );
     let state = s
         .call("configure_sheet", json!({"widthCm":10,"heightCm":20}))
         .unwrap();
@@ -372,8 +382,11 @@ fn real_png_svg_save_load_export_with_confirmations_and_no_overwrite() {
         f.svg();
         let mut s = f.server();
         import(&mut s, path);
-        s.call("configure_sheet", json!({"widthCm":2,"heightCm":2}))
-            .unwrap();
+        s.call(
+            "configure_sheet",
+            json!({"widthCm":2,"heightCm":2,"marginCm":0}),
+        )
+        .unwrap();
         assert!(s
             .call("export_png", json!({"name":"out.png","confirm":true}))
             .is_err());
@@ -545,8 +558,11 @@ fn packing_with_unplaced_copies_cannot_export_and_mutation_invalidates() {
     f.png("art.png");
     let mut s = f.server();
     let id = import(&mut s, "art.png");
-    s.call("configure_sheet", json!({"widthCm":1,"heightCm":1}))
-        .unwrap();
+    s.call(
+        "configure_sheet",
+        json!({"widthCm":1,"heightCm":1,"marginCm":0}),
+    )
+    .unwrap();
     s.call("update_design", json!({"id":id,"widthCm":2,"heightCm":2}))
         .unwrap();
     s.call("run_packing", json!({})).unwrap();
@@ -564,8 +580,11 @@ fn packing_with_unplaced_copies_cannot_export_and_mutation_invalidates() {
     .unwrap();
     assert!(s.layout.is_none());
     s.call("run_packing", json!({})).unwrap();
-    s.call("configure_sheet", json!({"widthCm":2,"heightCm":2}))
-        .unwrap();
+    s.call(
+        "configure_sheet",
+        json!({"widthCm":2,"heightCm":2,"marginCm":0}),
+    )
+    .unwrap();
     assert!(s.layout.is_none());
 }
 
@@ -594,8 +613,11 @@ fn rejects_escaping_links_for_ingest_load_and_export() {
         .is_err());
     assert_eq!(s.list_ingest().unwrap()["files"], json!(["art.png"]));
     import(&mut s, "art.png");
-    s.call("configure_sheet", json!({"widthCm":1,"heightCm":1}))
-        .unwrap();
+    s.call(
+        "configure_sheet",
+        json!({"widthCm":1,"heightCm":1,"marginCm":0}),
+    )
+    .unwrap();
     s.call("run_packing", json!({})).unwrap();
     #[cfg(unix)]
     std::os::unix::fs::symlink(&external, s.config.workspace.join("exports")).unwrap();
@@ -651,8 +673,11 @@ fn failed_import_and_changed_asset_export_leave_job_and_files_intact() {
     f.png("art.png");
     let mut s = f.server();
     import(&mut s, "art.png");
-    s.call("configure_sheet", json!({"widthCm":1,"heightCm":1}))
-        .unwrap();
+    s.call(
+        "configure_sheet",
+        json!({"widthCm":1,"heightCm":1,"marginCm":0}),
+    )
+    .unwrap();
     s.call("run_packing", json!({})).unwrap();
     let before = s.snapshot();
     fs::write(f.0.join("ingest/broken.png"), b"not png").unwrap();
@@ -900,7 +925,8 @@ fn a_full_exported_sheet_with_edge_pieces_can_be_split_again() {
     .unwrap();
     s.call(
         "configure_sheet",
-        json!({"widthCm":60,"heightCm":100,"gapCm":1}),
+        // Edge pieces are the point of this regression: no outer margin.
+        json!({"widthCm":60,"heightCm":100,"gapCm":1,"marginCm":0}),
     )
     .unwrap();
     s.call("run_packing", json!({})).unwrap();
@@ -938,4 +964,35 @@ fn a_full_exported_sheet_with_edge_pieces_can_be_split_again() {
     .unwrap();
     let d = s.job.designs.last().unwrap();
     assert!((d.original_aspect_ratio - 2.0).abs() < 0.01);
+}
+
+#[test]
+fn configure_sheet_keeps_or_sets_the_outer_margin_and_packing_honours_it() {
+    let f = Fixture::new();
+    f.png("art.png");
+    let mut s = f.server();
+    let state = s
+        .call("configure_sheet", json!({"widthCm":10,"heightCm":10}))
+        .unwrap();
+    assert_eq!(state["job"]["sheetConfig"]["marginCm"], 1.0);
+    s.call(
+        "configure_sheet",
+        json!({"widthCm":10,"heightCm":10,"marginCm":2,"gapCm":0}),
+    )
+    .unwrap();
+    s.call(
+        "import_design",
+        json!({"path":"art.png","widthCm":6,"heightCm":6,"quantity":1}),
+    )
+    .unwrap();
+    s.call("run_packing", json!({})).unwrap();
+    let p = &s.layout.as_ref().unwrap().sheets[0].placements[0];
+    assert_eq!((p.x_cm, p.y_cm), (2.0, 2.0));
+    assert!(s
+        .call(
+            "configure_sheet",
+            json!({"widthCm":10,"heightCm":10,"marginCm":5})
+        )
+        .is_err());
+    assert_eq!(s.job.sheet_config.margin_cm, Some(2.0));
 }

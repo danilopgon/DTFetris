@@ -4,7 +4,7 @@ use crate::domain::assets::{
 use crate::domain::design::{
     fitted_visible_size_cm, parse_color_override, DesignInput, ImageFormat, Placement, Sheet,
 };
-use crate::domain::packing::{validate_gap_cm, CM_QUANTUM};
+use crate::domain::packing::{validate_gap_cm, validate_margin_cm, CM_QUANTUM};
 use image::{imageops, RgbaImage};
 use std::{
     collections::{HashMap, HashSet},
@@ -98,6 +98,7 @@ fn validate(sheets: &[Sheet], designs: &[DesignInput]) -> Result<(), String> {
     }
     for sheet in sheets {
         let gap = validate_gap_cm(sheet.gap_cm)?;
+        let margin = validate_margin_cm(sheet.margin_cm, sheet.width_cm, sheet.height_cm)?;
         if sheet.id.trim().is_empty()
             || !ids.insert(&sheet.id)
             || !positive_integer(sheet.width_cm)
@@ -119,7 +120,7 @@ fn validate(sheets: &[Sheet], designs: &[DesignInput]) -> Result<(), String> {
             };
             if ![p.x_cm, p.y_cm]
                 .into_iter()
-                .all(|v| v.is_finite() && v >= 0.0)
+                .all(|v| v.is_finite() && v >= margin - EPSILON)
                 || !p.width_cm.is_finite()
                 || !p.height_cm.is_finite()
                 || p.width_cm < w - EPSILON
@@ -127,8 +128,8 @@ fn validate(sheets: &[Sheet], designs: &[DesignInput]) -> Result<(), String> {
                 || p.height_cm < h - EPSILON
                 || p.height_cm > h + CM_QUANTUM + EPSILON
                 || (p.rotated && !d.can_rotate)
-                || p.x_cm + p.width_cm > sheet.width_cm + EPSILON
-                || p.y_cm + p.height_cm > sheet.height_cm + EPSILON
+                || p.x_cm + p.width_cm > sheet.width_cm - margin + EPSILON
+                || p.y_cm + p.height_cm > sheet.height_cm - margin + EPSILON
             {
                 return Err(
                     "Una ubicación tiene dimensiones, rotación o límites inválidos.".into(),
@@ -448,6 +449,7 @@ mod tests {
         let (width_cm, height_cm) = fitted_visible_size_cm(d).unwrap();
         Sheet {
             gap_cm: None,
+            margin_cm: None,
             id: "sheet-1".into(),
             width_cm: 4.0,
             height_cm: 4.0,
@@ -464,6 +466,23 @@ mod tests {
 
     fn export(f: &Fixture, s: &[Sheet], d: &[DesignInput]) -> Result<Vec<String>, String> {
         export_png_into(s, d, &f.0.join("output.png"))
+    }
+
+    #[test]
+    fn placements_inside_the_outer_margin_are_rejected() {
+        let f = Fixture::new();
+        let d = f.png();
+        let edge = Sheet {
+            margin_cm: Some(1.5),
+            ..sheet(&d)
+        };
+        // The fixture places the piece at (1, 1) cm: inside a 1.5 cm border.
+        assert!(export(&f, &[edge], &[d.clone()]).is_err());
+        let inside = Sheet {
+            margin_cm: Some(1.0),
+            ..sheet(&d)
+        };
+        export(&f, &[inside], &[d]).unwrap();
     }
 
     #[test]
@@ -492,6 +511,7 @@ mod tests {
                 width_cm: 9.0,
                 height_cm: 4.0,
                 gap_cm: Some(0.3),
+                margin_cm: None,
             },
             designs: vec![d.clone()],
         })
@@ -560,6 +580,7 @@ mod tests {
                 width_cm: 3.0,
                 height_cm: 2.0,
                 gap_cm: Some(0.3),
+                margin_cm: None,
             },
             designs: vec![d.clone()],
         })

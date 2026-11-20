@@ -80,6 +80,8 @@ pub struct Placement {
 pub struct Sheet {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gap_cm: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub margin_cm: Option<f64>,
     pub id: String,
     pub width_cm: f64,
     pub height_cm: f64,

@@ -81,6 +81,29 @@ describe('JobToolbar with real Zustand state and mocked commands/dialogs', () =>
     expect(screen.getByRole('button', { name: 'Guardar trabajo' })).toBeEnabled()
   })
 
+  it('shows a 10 mm margin for a new job, applies it in cm and rejects a margin that leaves no room', async () => {
+    useAppStore.setState({ sheetConfig: { widthCm: 58, heightCm: 100, gapCm: 0.3, marginCm: 1 } })
+    render(<JobToolbar onBusyChange={vi.fn()} />)
+    const margin = screen.getByLabelText('Margen exterior (mm)')
+    expect(margin).toHaveValue(10)
+    await userEvent.clear(margin)
+    await userEvent.type(margin, '20')
+    expect(screen.getByRole('button', { name: 'Generar planchas' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar configuración' }))
+    expect(useAppStore.getState().sheetConfig.marginCm).toBe(2)
+    expect(margin).toHaveValue(20)
+    await userEvent.clear(margin)
+    await userEvent.type(margin, '290')
+    expect(screen.getByRole('button', { name: 'Aplicar configuración' })).toBeDisabled()
+    expect(useAppStore.getState().sheetConfig.marginCm).toBe(2)
+  })
+
+  it('shows zero margin for legacy jobs without one', () => {
+    useAppStore.setState({ sheetConfig: { widthCm: 60, heightCm: 100 } })
+    render(<JobToolbar onBusyChange={vi.fn()} />)
+    expect(screen.getByLabelText('Margen exterior (mm)')).toHaveValue(0)
+  })
+
   it('shows zero separation for legacy jobs and does not silently apply an empty or negative draft', async () => {
     render(<JobToolbar onBusyChange={vi.fn()} />)
     const gap = screen.getByLabelText('Separación entre diseños (mm)')
